@@ -346,7 +346,7 @@ def insert_node(trees, CN):
     for tree in trees:
         if len(tree) == 1 and CN < tree[0]: 
             # if it is a leaf node and CN is less than the value of this leaf node insert it and append it to the list of output trees:
-            new_CNs = (node,tree[0]-CN)
+            new_CNs = (CN,tree[0]-CN)
 
             # make the new trees created left side heavy to allow for matching later on to the simulated truth tree, if it exists.
             new_tree = (tree[0],(max(new_CNs),),(min(new_CNs),))
@@ -490,16 +490,27 @@ def get_timings_per_tree(tree,epochs,copy_dict):
     unique_tree_labels = range(count)
 
     for label in unique_tree_labels:
-
         if label == 0:
             # then it is the root node and there is no such thing as a timing for the first bifurcation
             # it is simply a natural split do to each person inheriting one of each CN
             timings = np.tile(timings, (1,1))
             timings[:,label] = 0 
 
-        elif label == 1 or label == 2:
+        elif label == 1:# or label == 2:
+            # then this is the root node of each of the maternal and paternal pairs respectively
             timings = np.tile(timings, (epochs,1))
-            timings[:,label] = list( range(1, epochs+1) )
+            timings[:,label] = list( range(1, epochs+1))
+
+        elif label == 2:
+            # then this is the root node of each of the maternal and paternal pairs respectively
+            timings = np.tile(timings, (epochs,1))
+
+            new_values = []
+            for x in range(1, epochs+1):
+                new_values += [x]*epochs
+
+            timings[:,label] = new_values
+
 
         else:
             parent = int( parents[ str( label ) ] ) 
@@ -509,7 +520,9 @@ def get_timings_per_tree(tree,epochs,copy_dict):
                 parents_time = timings[row][parent]
 
                 # not really too sure why parents_time could be none
-                assert(not (parents_time is None))
+                #assert(not (parents_time is None))
+                if parents_time is None:
+                    continue
 
                 if parents_time <= epochs and label_to_copy[str(label)] == 1: 
                     # the copy number of this node is 1 and it doesn’t bifurcate so it can exist for 0 time
@@ -591,7 +604,7 @@ def get_branch_lengths(timings):
         # these branch_lengths are the lengths for each node to bifurcate
 
     # now we need to stack the branch lengths of the same copy numbers together:
-    CNs = sorted([x for x in re.split("\(|\)|,|'", str(tree)) if x.isdigit()],reverse=True)
+    CNs = [x for x in re.split("\(|\)|,|'", str(tree)) if x.isdigit()]
     unique_CNs = sorted(list(set(CNs)),reverse=True)
 
     for CN in unique_CNs:
@@ -630,7 +643,7 @@ def get_path_code(code_list):
     return(output)
 
 
-def timing_struct_to_BP_likelihood_per_chrom(data, timings, chrom, pre, mid, post, up, down):
+def timing_struct_to_BP_likelihood_per_chrom(data, timings, chrom, pre, mid, post):
 
     all_BP_likelihoods = []
 
@@ -697,7 +710,10 @@ def timing_struct_to_BP_likelihood_per_chrom(data, timings, chrom, pre, mid, pos
 
 
 def get_BP_likelihoods(timings,pre,mid,post,p_up,p_down):
-    data = pkl.load(open("../precomputed/store_pre_pickle/pre_mat129_u"+str(int(p_up))+"_d"+str(int(p_down))+".precomputed.pickle",'rb'))
+    file = precomputed_file_folder + \
+        "/precomputed/store_pre_pickle/pre_mat129_u"+str(int(p_up))+ \
+        "_d"+str(int(p_down))+".precomputed.pickle"
+    data = pkl.load(open(file,'rb'))
     BP_likelihoods = {}
     for chrom in timings.keys():
         BP_likelihoods[chrom]  = timing_struct_to_BP_likelihood_per_chrom(
@@ -706,9 +722,7 @@ def get_BP_likelihoods(timings,pre,mid,post,p_up,p_down):
                 chrom=chrom,
                 pre=pre,
                 mid=mid,
-                post=post,
-                p_up=p_up,
-                p_down=p_down
+                post=post
                 )
     return(BP_likelihoods)
 
@@ -794,8 +808,8 @@ def path_code_to_pre_mid_post(path):
 ##### 
 
 print("START")
-do_simulation = True
-cache_results = True
+do_simulation = False 
+cache_results = False
 
 if do_simulation:
     pre = 2
