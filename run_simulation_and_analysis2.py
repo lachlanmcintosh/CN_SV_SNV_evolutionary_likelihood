@@ -201,7 +201,7 @@ def count_CN_multiplicities(observed_CNs):
     multiplicities = {}
     
     for chrom_type in observed_CNs:
-        for CN in CNs:
+        for CN in observed_CNs[chrom_type]:
             if CN not in multiplicities: 
                 multiplicities[CN] = 1
 
@@ -212,7 +212,7 @@ def count_CN_multiplicities(observed_CNs):
 
 # for every copy number sum the precomputed values weighted against their multiplicity
 # then adjust for CN’s not being able to go to zero
-def CN_multiplicities_to_likelihoods(observed_CNs):
+def CN_multiplicities_to_likelihoods(observed_CN_multiplicities):
     # these relative references will need to be modified before publishing 
     def CN_filename(CN):
         return precomputed_file_folder + "/collated_128_p128_v3_"+str(CN)+".npy"
@@ -221,15 +221,15 @@ def CN_multiplicities_to_likelihoods(observed_CNs):
         return np.load(CN_filename(copy)) * multiplicity
 
     lls = None
-    for copy in observed_CNs:
+    for copy in observed_CN_multiplicities:
         if lls is None:
-            lls = ll(copy,observed_CNs[copy])
+            lls = ll(copy,observed_CN_multiplicities[copy])
 
         else:
-            lls += ll(copy,observed_CNs[copy])
+            lls += ll(copy,observed_CN_multiplicities[copy])
 
     # account for the inability to lose all copies of a particular chromosome:
-    likelihoods = np.exp(lls - np.log(1-np.exp(np.load(CN_filename(0)))) * observed_CNs[0])
+    likelihoods = np.exp(lls - np.log(1-np.exp(np.load(CN_filename(0)))) * observed_CN_multiplicities[0])
 
     # now we want to merge these computed likelihoods with the metadata columns:
     named_likelihoods = pkl.load(open(precomputed_file_folder+"/collated_128_p128_v3_list.pickle",'rb'))
@@ -237,7 +237,8 @@ def CN_multiplicities_to_likelihoods(observed_CNs):
     named_likelihoods.insert(3,"likelihood",likelihoods,True)
     named_likelihoods.columns = ["p_up","p_down","path","likelihood"]
     named_likelihoods.replace([np.inf,-np.inf], np.nan, inplace=True)
-    # would like to investigate further as to what np.inf is
+    # would like to investigate further as to what results in "np.inf"; there should be no likelihood of infinte value
+
     named_likelihoods.dropna(axis=0)
     named_likelihoods.sort_values(by=['likelihood'], inplace=True, ascending=False)
 
@@ -266,8 +267,9 @@ def likelihoods_to_marginal_likelihoods(likelihoods):
     print(sum(marginal_likelihoods["likelihood"]))
 
     return(marginal_likelihoods)
-###### STEP 3; recalculate the top branching process loglikelihoods by incorporating the SNV data under a poisson model
-###### STEP 3a; calculate the SNV multiplicities of each chromosome
+
+
+###### STEP 3; calculate the SNV multiplicities of each chromosome
 ######
 ######
 ######
@@ -319,7 +321,7 @@ def count_SNV_multiplicities(simulated_chromosomes):
     return(SNV_counts_to_SNV_multiplicities(simulated_chromosomes_to_SNV_counts(simulated_chromosomes)))
 
 
-##### STEP 3b; now we have SNV counts, make all possible trees that could explain those SNV counts for the given epoch structure “(pre,mid, post)”
+##### STEP 4; now we have SNV counts, make all possible trees that could explain those SNV counts for the given epoch structure “(pre,mid, post)”
 ##### 
 ##### 
 ##### 
@@ -364,8 +366,6 @@ def insert_node(trees, CN):
 # for a given tree made up of the observed SNV’s excluding copy number 1, 
 # insert 1’s everywhere until 1’s are all the leaf nodes and “completed”:
 def complete_tree(tree):
-    if len(tree) == 1 and (tree[0] == 0 or tree[0] == 1):
-        return tree
 
     if len(tree) == 3:
         return((tree[0],complete_tree(tree[1]),complete_tree(tree[2])))
@@ -374,6 +374,8 @@ def complete_tree(tree):
         return((tree[0],complete_tree(tree[1]),complete_tree([tree[0]-tree[1][0]])))
 
     elif len(tree) == 1:
+        if tree[0] == 0 or tree[0] ==1:
+            return(tree)
         return((tree[0],complete_tree((tree[0]-int(tree[0]/2),)),complete_tree((int(tree[0]/2),))))
     else:
         assert(1==2) # throw a better error message than this
@@ -412,14 +414,14 @@ def generate_trees(observed_CNs,SNV_CNs):
 
         if SNV_CN in observed_CNs:
             # then it has already been inserted into the tree once in the first branch split
-            # we still need to attempt inserting it again it might present in the alternative tree branch
+            # we still need to attempt inserting it again it might present in the alternative tree branch:
             trees = trees + trees_with_new_node
         else:
-            # then we enforce that it is inserted
+            # then we enforce that it is inserted at least once:
             trees = trees_with_new_node
 
         while(True):
-            # continue to reinsert this node into the tree until no new trees are found
+            # continue to reinsert this node into more places in this tree until no new trees are found
             trees_with_node_inserted_again = insert_node(trees_with_new_node, SNV_CN)
             if trees_with_node_inserted_again == []:
                 break
@@ -436,7 +438,7 @@ def generate_trees(observed_CNs,SNV_CNs):
     return(trees)
 
 
-##### STEP 3c; now that all trees have been created, calculate all possible timings for each tree
+##### STEP 5; now that all trees have been created, calculate all possible timings for each tree
 ##### 
 ##### 
 ##### 
@@ -445,7 +447,6 @@ def generate_trees(observed_CNs,SNV_CNs):
 
 
 def label_tree(tree, count, parents, label_to_copy):
-    # what does the word count mean, need to change that to somehting more appropriate
 
     # change the numbers to labels "in place"
     # as we modify the tree we slowly peel of the tuple container and place a list one around it instead
@@ -563,7 +564,7 @@ def get_all_trees_and_timings(observed_SNV_multiplicities, observed_CNs):
     return(all_trees, timings)
 
 
-##### STEP 3d; now that all timing arrays for the nodes of each tree have been created, calculate the likelihoods from them
+##### STEP 6; now that all timing arrays for the nodes of each tree have been created, calculate the branch lengths
 ##### 
 ##### 
 ##### 
@@ -607,12 +608,27 @@ def get_branch_lengths(timings):
 
 # WHY DOES THIS NEED TO BE TRANSPOSED?
 
-def get_poisson_loglikelihood(lengths,counts,branch_lengths,plambda):
-    A = np.log(branch_lengths.astype(float) * plambda * lengths[chrom]) * counts
-    B = -np.tile( [scipy.special.gammaln(x+1) for x in counts], (branch_lengths.shape[0],1))
-    C = -branch_lengths * plambda
-    total = np.sum(A + B + C, axis=1)
-    return(total)
+##### STEP 7; from the branch lengths calculate the BP likelihoods
+##### 
+##### 
+##### 
+##### 
+##### 
+
+
+def get_path_code(code_list):
+    output = ""
+    count = 0
+    for i in range(len(code_list)):
+        if code_list[i] == "A":
+            count += 1
+        if code_list[i] == "GD":
+            output += str(count)
+            count = 0
+            output += "G"
+    output += str(count)
+    return(output)
+
 
 def timing_struct_to_BP_likelihood_per_chrom(data, timings, chrom, pre, mid, post, up, down):
 
@@ -679,6 +695,7 @@ def timing_struct_to_BP_likelihood_per_chrom(data, timings, chrom, pre, mid, pos
 
     return(all_BP_likelihoods)
 
+
 def get_BP_likelihoods(timings,pre,mid,post,p_up,p_down):
     data = pkl.load(open("../precomputed/store_pre_pickle/pre_mat129_u"+str(int(p_up))+"_d"+str(int(p_down))+".precomputed.pickle",'rb'))
     BP_likelihoods = {}
@@ -694,6 +711,23 @@ def get_BP_likelihoods(timings,pre,mid,post,p_up,p_down):
                 p_down=p_down
                 )
     return(BP_likelihoods)
+
+
+##### STEP 8; from the branch lengths and the BP likelihoods calculate the join CN-SNV likelihoods
+##### 
+##### 
+##### 
+##### 
+##### 
+
+
+def get_poisson_loglikelihood(lengths,counts,branch_lengths,plambda):
+    A = np.log(branch_lengths.astype(float) * plambda * lengths[chrom]) * counts
+    B = -np.tile( [scipy.special.gammaln(x+1) for x in counts], (branch_lengths.shape[0],1))
+    C = -branch_lengths * plambda
+    total = np.sum(A + B + C, axis=1)
+    return(total)
+
 
 def get_all_poisson_loglikelihoods_per_chr(timings,plambda,BP_likelihoods,observed_SNV_multiplicities): # these "timings" are on a per chromosome basis
     SNV_likelihoods = []
@@ -715,6 +749,7 @@ def get_all_poisson_loglikelihoods_per_chr(timings,plambda,BP_likelihoods,observ
         SNV_likelihoods += [this_SNV_likelihood]
 
     return(SNV_likelihoods)
+
 
 def find_best_SNV_likelihood(plambda, timings, BP_likelihoods):
     SNV_likelihoods = {}
@@ -739,23 +774,11 @@ def find_best_SNV_likelihood(plambda, timings, BP_likelihoods):
 
     return(total,best) # also need to return which tree is the best and which row of that tree is the best.    
 
+
 def objective_function_SNV_loglik(plambda,timings,BP_likelihoods):
     total,best = find_best_SNV_likelihood(plambda,timings,BP_likelihoods)
     print(best)
     return(-total)
-
-def get_path_code(code_list):
-    output = ""
-    count = 0
-    for i in range(len(code_list)):
-        if code_list[i] == "A":
-            count += 1
-        if code_list[i] == "GD":
-            output += str(count)
-            count = 0
-            output += "G"
-    output += str(count)
-    return(output)
 
 
 def path_code_to_pre_mid_post(path):
@@ -763,6 +786,12 @@ def path_code_to_pre_mid_post(path):
     pre, mid, post = bits[0:3]
     return((pre,mid,post))
 
+##### STEP 9; run the simulation and try to find the parameters that created the simulation by optimising the likelihood of the simulated genome
+##### 
+##### 
+##### 
+##### 
+##### 
 
 print("START")
 do_simulation = True
@@ -877,26 +906,20 @@ for res in range(SEARCH_DEPTH):
             )
 
 
+    # at some point evaluate the relative value of the likelihood contributed from the BP model to the likelihood contributed by the SNV model
+    outputs = []
+    for plambda in range(100):
+        lam = plambda/5
+        outputs += [(lam,objective_function_SNV_loglik(lam,timings,BP_likelihoods))]
 
-# it really looks like the likelihood contributed from the BP is much lower than the ones contributed by from the SNVs
-outputs = []
-for plambda in range(100):
-    lam = plambda/5
-    outputs += [(lam,objective_function_SNV_loglik(lam,timings,BP_likelihoods))]
+    #iterating though linearly doesn't seem to be too bad. It isn't fast but it isn't too bad, something to fix later
+    # maybe we can add in the BP likelihoods now. 
+    outputs.sort(key=lambda x: x[1])
+    print("genome likelihoods vs lambda parameter: "+outputs)
 
-
-#iterating though linearly doesn't seem to be too bad. It isn't fast but it isn't too bad.
-# maybe we can add in the BP likelihoods now. 
-print(outputs.sort(key=lambda x: x[1]))
-print(outputs)
-
-
-# now we need to modify it so that we are also printing out the best subtree for each tree
-result = find_best_SNV_likelihood(outputs[0][0],timings,BP_likelihoods)
-print(result)
-
-def tidy_tree_timings(tree,parents):
-    return(tree)
+    # now we need to modify it so that we are also printing out the best subtree for each tree
+    result = find_best_SNV_likelihood(outputs[0][0],timings,BP_likelihoods)
+    print(result)
 
 
 for chrom in result[1].keys():
