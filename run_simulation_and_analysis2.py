@@ -226,7 +226,21 @@ def CN_multiplicities_to_likelihoods(CN_multiplicities):
     # account for the inability to lose all copies of a particular chromosome:
     likelihoods = np.exp(lls - np.log(1-np.exp(np.load(CN_filename(0)))) * CN_multiplicities[0])
 
-    return(likelihoods)
+    # now we want to merge these computed likelihoods with the metadata columns:
+    named_likelihoods = pkl.load(open(precomputed_file_folder+"/collated_128_p128_v3_list.pickle",'rb'))
+
+    named_likelihoods.insert(3,"likelihood",likelihoods,True)
+    named_likelihoods.columns = ["p_up","p_down","path","likelihood"]
+    # named_likelihoods.replace([np.inf, -np.inf], np.nan, inplace=True)
+    named_likelihoods.dropna(axis=0)
+    named_likelihoods.sort_values(by=['likelihood'], inplace=True, ascending=False)
+    total = np.nansum(named_likelihoods["likelihood"])
+    print(total)
+    named_likelihoods["likelihood"] /= total
+    print("best likelihoods")
+    print(named_likelihoods[:][0:300].to_string())
+
+    return(named_likelihoods)
 
 ###### STEP 3; recalculate the top branching process loglikelihoods by incorporating the SNV data under a poisson model
 ###### STEP 3a; calculate the SNV multiplicities of each chromosome
@@ -608,64 +622,26 @@ true_p_up = p_up
 true_p_down = p_down
 true_rate = rate
 
+simulated_chromosomes = simulate_single_with_poisson_timestamps_names(
+        p_up=p_up, 
+        p_down=p_down, 
+        pre=pre, 
+        mid=mid, 
+        post=post, 
+        rate=rate)
+
+print("copynumber multiplicities")
+observed_CN_multiplicities = count_CN_multiplicities(simulated_chromosomes=simulated_chromosomes)
+print(observed_CN_multiplicities)
+
+print("loglikelihoods")
+likelihoods = CN_multiplicities_to_likelihoods(observed_CN_multiplicities=observed_CN_multiplicities)
+print(likelihoods)
+
 do_steps_123 = True 
 
-if do_steps_123:
-
-
-    simulated_chromosomes = simulate_single_with_poisson_timestamps_names(
-            p_up=p_up, 
-            p_down=p_down, 
-            pre=pre, 
-            mid=mid, 
-            post=post, 
-            rate=rate)
-
-    simulated_chromosomes_copy = copy.deepcopy(simulated_chromosomes)
-    for chrom_type in simulated_chromosomes_copy:
-        print(chrom_type)
-        paternal_T = False
-        paternal_F = False
-
-        for chrom in simulated_chromosomes_copy[chrom_type]:
-            chrom["SNVs"] = len(chrom["SNVs"])
-
-            if chrom["paternal"]:
-                paternal_T = True
-
-            else:
-                paternal_F = True
-
-        print(simulated_chromosomes_copy[chrom_type])
-        print(paternal_T and paternal_F)
-
-    print("END")
-
-    print("copynumber multiplicities")
-    observed_CN_multiplicities = count_CN_multiplicities(simulated_chromosomes)
-    print(observed_CN_multiplicities)
-
-    print("loglikelihoods")
-    likelihoods = CN_multiplicities_to_likelihoods(observed_CN_multiplicities)
-    print(likelihoods)
-
-    # now we need to know the indicies of these likelihoods
-
-
-    named_likelihoods = pkl.load(open(precomputed_file_folder+"/collated_128_p128_v3_list.pickle",'rb'))
-    #named_likelihoods.rename(columns={'0': 'p_up', '1': 'p_down', '2': 'path'}, inplace=True)
-    named_likelihoods.insert(3,"likelihood",likelihoods,True)
-    named_likelihoods.columns = ["p_up","p_down","path","likelihood"]
-    named_likelihoods.replace([np.inf, -np.inf], np.nan, inplace=True)
-    named_likelihoods.dropna(axis=0)
-    named_likelihoods.sort_values(by=['likelihood'], inplace=True, ascending=False)
-    total = np.nansum(named_likelihoods["likelihood"])
-    print(total)
-    named_likelihoods["likelihood"] /= total
-    print("best likelihoods")
-    print(named_likelihoods[:][0:300].to_string())
-
-    aggregated_likelihoods = named_likelihoods.copy()
+def likelihoods_to_marginal_likelihoods(likelihoods):
+    aggregated_likelihoods = likelihoods#.copy()
     aggregated_likelihoods["mean_p_up"]   = aggregated_likelihoods["p_up"]  *aggregated_likelihoods["likelihood"]
     aggregated_likelihoods["mean_p_down"] = aggregated_likelihoods["p_down"]*aggregated_likelihoods["likelihood"]
     aggregated_likelihoods = aggregated_likelihoods.groupby(["path"], as_index=False)[['likelihood','mean_p_up','mean_p_down']].sum()
@@ -677,6 +653,18 @@ if do_steps_123:
     print("best marginal likelihoods")
     print(aggregated_likelihoods[:][0:20].to_string())
     print(sum(aggregated_likelihoods["likelihood"]))
+
+    return(aggregated_likelihood)
+
+print("marginals")
+marginals = likelihoods_to_marginal_likelihoods(likelihoods)
+
+if do_steps_123:
+
+    # now we need to know the indicies of these likelihoods
+
+
+
 
     # I don't think the mean values are the best values to use, but they are the easiest to compute for now
     # it would also be easy to switch to the maximum values, so perhaps do that
@@ -722,13 +710,23 @@ print("pre: "+ str(pre))
 print("mid: "+str(mid))
 print("post: "+str(post))
 
-FLAG = 0
 all_trees = {}
 filled_trees = {}
 timings = {}
 SNV_likelihoods = {}
 
-chrom_CNs = count_chrom_CN_pairs(simulated_chromosomes)
+#def count_CN_pairs(simulated_chromosomes):
+#    # count how many of each chromosomal pair there are:
+#    return( [len([x for x in simulated_chromosomes if x["paternal"] == paternal]) for paternal in [True,False]] )
+#
+#def count_CN_pairs(simulated_chromosomes):
+#    chrom_CNs = {}
+#    for chrom in simulated_chromosomes:
+#        chrom_CNs[chrom] = count_CN_pairs(simulated_chromosomes=simulated_chromosomes)
+#
+#    return(chrom_CNs)
+
+chrom_CNs = count_chrom_CN_multiplicities(simulated_chromosomes)
 for chrom in observed_SNV_multiplicities:
     print("###CHROM: "+str(chrom))
 
