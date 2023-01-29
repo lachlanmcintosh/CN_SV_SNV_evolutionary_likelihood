@@ -485,6 +485,8 @@ def get_timings_per_tree(tree,epochs,copy_dict):
     # parents is a dictionary that describe the parental relationships between the unique numbers of the nodes in the tree
     # label_to_copy is a dictionary where the keys are the unique labels and the values are the copy number of the corresponding node
 
+    count = count + 1
+
     # set up an empty array to begin with, each column will represent a particular node in the tree
     timings = np.array([None]*count)
     unique_tree_labels = range(count)
@@ -600,6 +602,10 @@ def get_branch_lengths(timings):
     for child in parents:
         ch = int(child)
         p = int(parents[child])
+        #print("child: "+ str(ch))
+        #print("parent: "+ str(p))
+        #print(branch_lengths)
+
         branch_lengths[:,ch] = branch_lengths[:,ch] - branch_lengths[:,p]
         # these branch_lengths are the lengths for each node to bifurcate
 
@@ -617,7 +623,7 @@ def get_branch_lengths(timings):
         else:
             stacked_branch_lengths = np.vstack((stacked_branch_lengths, new_stacked_branch_lengths))
 
-    return((CNs, lengths_array, unique_CNs, branch_lengths, np.transpose(stacked_branch_lengths)))
+    return((CNs, unique_CNs, branch_lengths, np.transpose(stacked_branch_lengths)))
 
 # WHY DOES THIS NEED TO BE TRANSPOSED?
 
@@ -648,7 +654,8 @@ def timing_struct_to_BP_likelihood_per_chrom(data, timings, chrom, pre, mid, pos
     all_BP_likelihoods = []
 
     for these_timings in timings[chrom]:
-        labels, lengths_array, unique_labels, branch_lengths, stacked_branch_lengths = get_branch_lengths(these_timings)
+        print(timings[chrom])
+        CNs, unique_CNs, branch_lengths, stacked_branch_lengths = get_branch_lengths(these_timings)
 
         path = []
         if pre > -1:
@@ -664,20 +671,20 @@ def timing_struct_to_BP_likelihood_per_chrom(data, timings, chrom, pre, mid, pos
 
         print("timings")
         print(these_timings)
-        print("labels")
-        print(labels)
-        print("lengths")
-        print(lengths_array)
+        print("copy numbers")
+        print(CNs)
+        print("branch lengths")
+        print(branch_lengths)
         #>>> data = pickle.load(open("pre_mat129_u65_d10.precomputed.pickle",'rb'))
         # in the keys are all the possible paths...
         # each of these is a matrix that you can use to calculate the possible paths
         
         ends = these_timings[3]
-        starts = ends - lengths_array
+        starts = ends - branch_lengths
 
         paths = np.zeros(ends.shape, dtype=float, order='C')
-        for row in range(lengths_array.shape[0]):
-            for col in range(lengths_array.shape[1]):
+        for row in range(branch_lengths.shape[0]):
+            for col in range(branch_lengths.shape[1]):
                 #print(path)
                 #print((row,col))
                 these_paths = path[starts[row][col]:ends[row][col]]
@@ -902,8 +909,9 @@ for res in range(SEARCH_DEPTH):
             observed_SNV_multiplicities = observed_SNV_multiplicities,
             observed_CNs = observed_CNs
             )
-    print("all trees: "+str(all_trees))
-    print("timings: "+str(timings))
+
+    # need to take the rpinting of information out of the functions and into this main function only
+    # if information needs to be printed then it needs to be able to be printed from this function here
 
     # from scipy.optimize import NonlinearConstraint, Bounds
     # output = scipy.optimize.minimize(fun=objective_function_SNV_loglik,x0=5,args=(timings))
