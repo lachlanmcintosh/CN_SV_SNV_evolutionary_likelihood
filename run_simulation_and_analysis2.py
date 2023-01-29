@@ -96,10 +96,12 @@ def simulate_single_with_poisson_timestamps_names(p_up,p_down,pre,mid,post,rate)
         for chrom_type in simulated_chromosomes:
             for chrom in simulated_chromosomes[chrom_type]:
                 # generate a random number of SNVs proportional to the length of the genome:
-                additional_SNV_count = np.random.poisson(rate * lengths[chrom_type],1)[0] 
+                additional_SNV_count = np.random.poisson(rate * lengths[chrom_type],1)[0]
+
                 # add these SNVs to the chromosome 
                 for x in range(SNV_count + 1, SNV_count + additional_SNV_count + 1):
                     chrom["SNVs"] += [{"unique_identifier":str(x),"epoch_created":epoch}] 
+
                 # update the SNV count
                 SNV_count = SNV_count + additional_SNV_count 
 
@@ -117,12 +119,14 @@ def simulate_single_with_poisson_timestamps_names(p_up,p_down,pre,mid,post,rate)
                     # copy each chromosome and record a unique identity and parent for it:
                     # need to deep copy or we can change the old chromosome
                     new_chromosome = copy.deepcopy(chrom) 
+
                     # chrom count is the next unique identifier of a chromosome
                     chrom_count += 1 
                     new_chromosome["unique_identifier"] = chrom_count
                     new_chromosome["epoch_created"] = epoch
                     new_chromosome["parent"] = chrom["unique_identifier"]
                     new_chromosomes += [new_chromosome]
+
                 simulated_chromosomes[chrom_type] += new_chromosomes
 
         else:
@@ -132,6 +136,7 @@ def simulate_single_with_poisson_timestamps_names(p_up,p_down,pre,mid,post,rate)
                 # buy viable we mean that we need to have at least one copy of every chromosome
                 while(True):
                     new_chromosomes = []
+
                     for chrom in simulated_chromosomes[chrom_type]:
                         # randomly draw from 
                         #    losing this chromosome with probability p_down, 
@@ -171,10 +176,9 @@ def simulate_single_with_poisson_timestamps_names(p_up,p_down,pre,mid,post,rate)
         for chrom_type in simulated_chromosomes: 
             assert(count_paternity(simulated_chromosomes[chrom_type],paternal=True) % 2 == 0)
             assert(count_paternity(simulated_chromosomes[chrom_type],paternal=False) % 2 == 0)
+
     for chrom_type in simulated_chromosomes:
         assert(len(simulated_chromosomes) != 0)
-        #assert( count_paternity(simulated_chromosomes[chrom_type],paternal=True) != 0 or 
-        #        count_paternity(simulated_chromosomes[chrom_type],paternal=False) != 0 )
 
     return(simulated_chromosomes)
 
@@ -185,44 +189,20 @@ def simulate_single_with_poisson_timestamps_names(p_up,p_down,pre,mid,post,rate)
 #####
 #####
 
-# we cannot being to introduce the information that the SNVs provide just yet due to the computational complexity 
-# of iterating over every SNV structure for each location “(p_up,p_down,pre,mid,post)” in the domain  
-
-
-#def count_chrom_CN_pairs(simulated_chromosomes):
-#    counter = {}
-#    for chrom_type in simulated_chromosomes:
-#        counter[chrom_type] = {
-#            "paternal":len([x for x in simulated_chromosomes[chrom_type] if x["paternal"]]),
-#            "maternal":len([x for x in simulated_chromosomes[chrom_type] if not x["paternal"]])
-#            }
-#    return(counter)
-
-#def chrom_CN_pairs_to_CN_multiplicities(observed_chrom_CNs):
-#    multiplicities = {}
-#    for chrom_type in observed_chrom_CNs:
-#        chrom_CNs = observed_chrom_CNs[chrom_type]
-#        for CN in [chrom_CNs["paternal"],chrom_CNs["maternal"]]:
-#            if CN not in multiplicities: 
-#                multiplicities[CN] = 1
-#            else:
-#                multiplicities[CN] += 1
-#    return(multiplicities)
-
-#def count_CN_multiplicities(simulated_chromosomes):
-#    return(chrom_CN_pairs_to_CN_multiplicities(count_chrom_CN_pairs(simulated_chromosomes)))
-
-# a better function than the above three:
 # count the number of each parental specific copy number found in the genome
 def count_CN_multiplicities(simulated_chromosomes):
     multiplicities = {}
+
     for chrom_type in simulated_chromosomes:
         CNs = [len([x for x in simulated_chromosomes[chrom_type] if paternal == x["paternal"]]) for paternal in [True,False]]
+
         for CN in CNs:
             if CN not in multiplicities: 
                 multiplicities[CN] = 1
+
             else:
                 multiplicities[CN] += 1
+
     return(multiplicities)
 
 # for every copy number sum the precomputed values weighted against their multiplicity
@@ -239,6 +219,7 @@ def CN_multiplicities_to_likelihoods(CN_multiplicities):
     for copy in CN_multiplicities:
         if lls is None:
             lls = ll(copy,CN_multiplicities[copy])
+
         else:
             lls += ll(copy,CN_multiplicities[copy])
 
@@ -260,13 +241,17 @@ def simulated_chromosomes_to_SNV_counts(simulated_chromosomes):
     for chrom_type in simulated_chromosomes:
         if chrom_type not in SNV_copy_counter:
             SNV_copy_counter[chrom_type] = {}
+
         for chrom in simulated_chromosomes[chrom_type]:
             for SNV in chrom["SNVs"]:
                 UI = SNV["unique_identifier"]
+
                 if UI not in SNV_copy_counter[chrom_type]:
                     SNV_copy_counter[chrom_type][UI] = 1
+
                 else:
                     SNV_copy_counter[chrom_type][UI] += 1
+
     return(SNV_copy_counter)
 
 
@@ -280,12 +265,16 @@ def SNV_counts_to_SNV_multiplicities(SNV_copy_counter):
     for chrom_number in SNV_copy_counter:
         if chrom_number not in multiplicities:
             multiplicities[chrom_number] = {}
+
         for SNV in SNV_copy_counter[chrom_number]:
             CN = SNV_copy_counter[chrom_number][SNV]
+
             if CN not in multiplicities[chrom_number]:
                 multiplicities[chrom_number][CN] = 1
+
             else:
                 multiplicities[chrom_number][CN] += 1
+
     return(multiplicities)
 
 def count_SNV_multiplicities(simulated_chromosomes):
@@ -308,31 +297,17 @@ def count_SNV_multiplicities(simulated_chromosomes):
 ##### a non zero evolutionary history where SNVs were allowed to accumulate. The latter is easier to computationally discover.
 ##### The tree structures can be simply constructed in a tuple of tuples format like tree = (value, left subtree, right subtree). 
 
-# I think this is an outdated function as the new code to generate the trees is necessarily a binary tree anyway, 
-# it should be used for error checking to assert that the trees made are binary trees
-#def is_binary(tree):
-#    if len(tree) == 3:
-#        return (is_binary(tree[1]) and # check the left side of the binary tree is binary
-#                is_binary(tree[2])) and # check the right side of the binary tree is binary
-#                tree[0] == tree[1][0]+tree[2][0] # check that the copy numbers of both sides add up to be the parents value
-#    elif len(tree) == 2:
-#		   # check to see if the only child is a binary tree and that the copy numbers add up:
-#        return is_binary(tree[1]) and tree[1][0] == tree[0]-1 
-#    elif len(tree) == 1:
-#        return True
-#    else:
-#        return False
-
-
 # given a collection of binary trees and a value of ‘CN’ to be inserted into these binary trees, 
 # insert a node of value CN once into every possible location for each tree and return that list of all the created trees:
 def insert_node(trees, CN):
     # new_trees will be a list of trees where each tree from ‘trees’ had a value of ‘CN’ inserted once somewhere within it
     new_trees = []
+
     for tree in trees:
         if len(tree) == 1 and CN < tree[0]: 
             # if it is a leaf node and CN is less than the value of this leaf node insert it and append it to the list of output trees:
             new_CNs = (node,tree[0]-CN)
+
             # make the new trees created left side heavy to allow for matching later on to the simulated truth tree, if it exists.
             new_tree = (tree[0],(max(new_CNs),),(min(new_CNs),))
             new_trees.append(new_tree)
@@ -341,6 +316,7 @@ def insert_node(trees, CN):
             # attempt to insert this value into the left and the right subtrees:
             for subtree in insert_node([tree[1]],CN): 
                 new_trees.append((tree[0],subtree,tree[2]))
+
             for subtree in insert_node([tree[2]],CN):
                 new_trees.append((tree[0],tree[1],subtree))
 
@@ -409,6 +385,7 @@ def generate_trees(chrom_CNs,SNV_CNs):
             trees_with_node_inserted_again = insert_node(trees_with_new_node, SNV_CN)
             if trees_with_node_inserted_again == []:
                 break
+
             trees += trees_with_node_inserted_again
             trees_with_new_node = trees_with_node_inserted_again
 
@@ -427,26 +404,10 @@ def generate_trees(chrom_CNs,SNV_CNs):
 ##### 
 ##### 
 
-# we want to find all the possible branchings of this tree
-# def num_of_events(tree):
-#    # this is a funciton that counts the number of binary branches in our tree:
-#    if len(tree) == 1:
-#        return(1)
-#    elif len(tree) == 2:
-#        return(1 + num_of_events(tree[1]))
-#    else:
-#        return(1 + num_of_events(tree[1]) + num_of_events(tree[2]))
-
-
-# convert the list representation of the tree to a tuple representation so that the contents can be modified in place
-# def tree_tuple_to_list(tuple_tree):
-#    left_side = "[".join(str(tuple_tree).split("("))
-#    right_side = "]".join(str(tuple_tree).split(")"))
-#    return(right_side)
-# don’t think this function actually gets used.
-
 
 def label_tree(tree, count, parents, label_to_copy):
+    # what does the word count mean, need to change that to somehting more appropriate
+
     # change the numbers to labels "in place"
     # as we modify the tree we slowly peel of the tuple container and place a list one around it instead
     tree = list(tree)
@@ -560,7 +521,7 @@ def get_branch_lengths(timings):
         ch = int(child)
         p = int(parents[child])
         branch_lengths[:,ch] = branch_lengths[:,ch] - branch_lengths[:,p]
-    # these branch_lengths are the lengths for each node to bifurcate
+        # these branch_lengths are the lengths for each node to bifurcate
 
     # now we need to stack the branch lengths of the same copy numbers together:
     CNs = sorted([x for x in re.split("\(|\)|,|'", str(tree)) if x.isdigit()],reverse=True)
@@ -569,8 +530,10 @@ def get_branch_lengths(timings):
     for CN in unique_CNs:
         indices = find_indices(CNs,CN)
         new_stacked_branch_lengths = branch_lengths[:,indices].sum(axis=1)
+
         if CN == CNs[0]:
             stacked_branch_lengths = new_stacked_branch_lengths
+
         else:
             stacked_branch_lengths = np.vstack((stacked_branch_lengths, new_stacked_branch_lengths))
 
@@ -578,8 +541,8 @@ def get_branch_lengths(timings):
 
 # WHY DOES THIS NEED TO BE TRANSPOSED?
 
-def get_poisson_loglikelihood(counts,branch_lengths,plambda):
-    A = np.log(branch_lengths.astype(float) * plambda) * counts
+def get_poisson_loglikelihood(lengths,counts,branch_lengths,plambda):
+    A = np.log(branch_lengths.astype(float) * plambda * lengths[chrom]) * counts
     B = -np.tile( [scipy.special.gammaln(x+1) for x in counts], (branch_lengths.shape[0],1))
     C = -branch_lengths * plambda
     total = np.sum(A + B + C, axis=1)
@@ -619,6 +582,7 @@ def find_best_SNV_likelihood(plambda, timings, BP_probs):
         for tree in range(len(SNV_likelihoods[chrom])):
             the_max = max(SNV_likelihoods[chrom][tree])
             the_row = np.argmax(SNV_likelihoods[chrom][tree])
+
             if the_max > best[chrom][0]:
                 best[chrom] = (the_max,tree,the_row)
 
@@ -628,23 +592,26 @@ def find_best_SNV_likelihood(plambda, timings, BP_probs):
 
     return(total,best) # also need to return which tree is the best and which row of that tree is the best.    
 
+
+print("START")
+pre = 2
+mid = 2
+post = -1
+p_up=0.3
+p_down=0.3
+rate = 10
+
+true_pre = pre
+true_mid = mid
+true_post = post
+true_p_up = p_up
+true_p_down = p_down
+true_rate = rate
+
 do_steps_123 = True 
 
 if do_steps_123:
-    print("START")
-    pre = 2
-    mid = 2
-    post = -1
-    p_up=0.3
-    p_down=0.3
-    rate = 10
 
-    true_pre = pre
-    true_mid = mid
-    true_post = post
-    true_p_up = p_up
-    true_p_down = p_down
-    true_rate = rate
 
     simulated_chromosomes = simulate_single_with_poisson_timestamps_names(
             p_up=p_up, 
@@ -659,19 +626,25 @@ if do_steps_123:
         print(chrom_type)
         paternal_T = False
         paternal_F = False
+
         for chrom in simulated_chromosomes_copy[chrom_type]:
             chrom["SNVs"] = len(chrom["SNVs"])
+
             if chrom["paternal"]:
                 paternal_T = True
+
             else:
                 paternal_F = True
+
         print(simulated_chromosomes_copy[chrom_type])
         print(paternal_T and paternal_F)
+
     print("END")
 
     print("copynumber multiplicities")
     observed_CN_multiplicities = count_CN_multiplicities(simulated_chromosomes)
     print(observed_CN_multiplicities)
+
     print("loglikelihoods")
     likelihoods = CN_multiplicities_to_likelihoods(observed_CN_multiplicities)
     print(likelihoods)
@@ -695,7 +668,7 @@ if do_steps_123:
     aggregated_likelihoods = named_likelihoods.copy()
     aggregated_likelihoods["mean_p_up"]   = aggregated_likelihoods["p_up"]  *aggregated_likelihoods["likelihood"]
     aggregated_likelihoods["mean_p_down"] = aggregated_likelihoods["p_down"]*aggregated_likelihoods["likelihood"]
-    aggregated_likelihoods = aggregated_likelihoods.groupby(["path"], as_index=False)['likelihood','mean_p_up','mean_p_down'].sum()
+    aggregated_likelihoods = aggregated_likelihoods.groupby(["path"], as_index=False)[['likelihood','mean_p_up','mean_p_down']].sum()
     aggregated_likelihoods.dropna(axis=0)
     aggregated_likelihoods.sort_values(by=['likelihood'], inplace=True, ascending=False)
     total = sum(aggregated_likelihoods["likelihood"]) 
@@ -719,7 +692,7 @@ if do_steps_123:
 
 def path_code_to_pre_mid_post(path):
     bits = [int(x) for x in path.split("G")] + [-1,-1]
-    pre, mid, post = bits[0:2]
+    pre, mid, post = bits[0:3]
     return((pre,mid,post))
 
 import shelve
@@ -751,7 +724,6 @@ print("post: "+str(post))
 
 FLAG = 0
 all_trees = {}
-binary_trees = {}
 filled_trees = {}
 timings = {}
 SNV_likelihoods = {}
@@ -775,15 +747,13 @@ for chrom in observed_SNV_multiplicities:
     epochs = pre+mid+post+(mid>=0)+(post>=0)
 
     timings[chrom] = [get_timings_per_tree(x,epochs,observed_SNV_multiplicities[chrom]) for x in all_trees[chrom]]
-    # timings[chrom] = [x for x in timings[chrom] if None not in x[3]]
 
     print("timings")
     print(timings[chrom])
 
     print("num trees: "+ str(len(all_trees[chrom])))
     print("num filled trees: " + str(len(all_trees[chrom])))
-    if len(binary_trees) == 0:
-        FLAG =1
+
 
 print(timings.keys())
 def objective_function_SNV_loglik(plambda,timings,BP_probs):
@@ -792,16 +762,10 @@ def objective_function_SNV_loglik(plambda,timings,BP_probs):
     return(-total)
 
 
-from scipy.optimize import NonlinearConstraint, Bounds
-
-#output = scipy.optimize.minimize(fun=objective_function_SNV_loglik,x0=5,args=(timings))
-#output = scipy.optimize.differential_evolution(func=objective_function_SNV_loglik,bounds=Bounds([0.], [20.]),args=(timings))
-
-
-
-
-if FLAG==1:
-    print("WARNING: IT IS POSSIBLE TO HAVE NO BINARY TREE!")
+# from scipy.optimize import NonlinearConstraint, Bounds
+# output = scipy.optimize.minimize(fun=objective_function_SNV_loglik,x0=5,args=(timings))
+# output = scipy.optimize.differential_evolution(func=objective_function_SNV_loglik,bounds=Bounds([0.], [20.]),args=(timings))
+# need to reintroduce some sort of non array search for both the rate parameter AND p_up AND p_down
 
 
 print(timings)
@@ -860,10 +824,13 @@ def timing_struct_to_BP_likelihood(data, timings, chrom, pre, mid, post, up, dow
                 #print(these_paths)
                 path_code = get_path_code(these_paths)
                 #print(path_code)
+
                 if labels[col] == '1':
                     likelihood = data[path_code][1][1]
+
                 else:
                     likelihood = data[path_code][1][2]
+
                 paths[row][col] = likelihood
 
         print("starts")
@@ -904,7 +871,6 @@ print(outputs.sort(key=lambda x: x[1]))
 print(outputs)
 
 
-
 # now we need to modify it so that we are also printing out the best subtree for each tree
 result = find_best_SNV_likelihood(outputs[0][0],timings,BP_probs)
 print(result)
@@ -927,7 +893,3 @@ for chrom in result[1].keys():
     # simulation[0] has the ssame len as simulation[2]
     # this is great, but now we need to record whom is the parent of whom in the simulation. can't remember how to pull it out from the snv list. that might help but better to bake it in from the start
     # then I want to compare the trees and the timings. 
-    #
-
-
-# BE CAREFUL AS TIMINGAS I THINK WE HAVE ONLY OPTIMISED OVER THE TIMINGS FOR ONE PARTICULAR TREE RATHER THAN ALSO OPTIMISING OVER ALL TREES
