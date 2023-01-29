@@ -106,9 +106,8 @@ def simulate_single_with_poisson_timestamps_names(pup,pdown,pre,mid,post,rate):
 
         # simulate the changes in copy number, but keep track of the SNVs
         # first see if this is a genome doubling round or an anueploidy round (they are mutually exclusive)
-        if (mid != -1 and epoch == pre) or # if this epoch is the epoch of the first round of genome doubling
-          (post != -1 and epoch == pre+1+mid): # if this epoch is the epoch of the second round of genome doubling
-            # then it is a genome doubling round
+        if (mid != -1 and epoch == pre) or (post != -1 and epoch == pre+1+mid): 
+            # if this epoch is the epoch of the first round or the second round of genome doubling
             for chrom_type in simulated_chromosomes:
                 new_chromosomes = []
                 for chrom in simulated_chromosomes[chrom_type]:
@@ -215,8 +214,8 @@ def simulate_single_with_poisson_timestamps_names(pup,pdown,pre,mid,post,rate):
 def count_CN_multiplicities(simulated_chromosomes):
     multiplicities = {}
     for chrom_type in simulated_chromosomes:
-        CNs = [len([x for x in simulated_chromosomes[chrom_type] if paternal == x["paternal"]] for paternal in [True,False]]
-        for CN in CNs
+        CNs = [len([x for x in simulated_chromosomes[chrom_type] if paternal == x["paternal"]]) for paternal in [True,False]]
+        for CN in CNs:
             if CN not in multiplicities: 
                 multiplicities[CN] = 1
             else:
@@ -626,16 +625,25 @@ def find_best_SNV_likelihood(plambda, timings, BP_probs):
 
     return(total,best) # also need to return which tree is the best and which row of that tree is the best.    
 
-do_steps_123 = False 
+do_steps_123 = True 
 
 if do_steps_123:
     print("START")
     pre = 2
     mid = 2
     post = -1
-    up=0.3
-    down=0.3
-    simulated_chromosomes = simulate_single_with_poisson_timestamps_names(up,down,pre,mid,post,10)
+    p_up=0.3
+    p_down=0.3
+    rate = 10
+
+    true_pre = pre
+    true_mid = mid
+    true_post = post
+    true_p_up = p_up
+    true_p_down = p_down
+    true_rate = rate
+
+    simulated_chromosomes = simulate_single_with_poisson_timestamps_names(p_up=pup, p_down=pdown, pre=pre, mid=mid, post=post, rate=rate)
     simulated_chromosomes_copy = copy.deepcopy(simulated_chromosomes)
     for chrom_type in simulated_chromosomes_copy:
         print(chrom_type)
@@ -700,7 +708,7 @@ if do_steps_123:
     d.close()
 
 def path_code_to_pre_mid_post(path):
-    bits = [int(x) for x in path.split(“G”)] + [-1,-1]
+    bits = [int(x) for x in path.split("G")] + [-1,-1]
     pre, mid, post = bits[0:2]
     return((pre,mid,post))
 
