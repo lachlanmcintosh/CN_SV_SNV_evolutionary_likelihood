@@ -525,6 +525,7 @@ def get_timings_per_tree(tree,epochs,copy_dict):
                 #assert(not (parents_time is None))
                 if parents_time is None:
                     continue
+                # don't know if this is the right thing, my quick look is that parents time will be none if the number of nestings are incompatible with the number of epochs.
 
                 if parents_time <= epochs and label_to_copy[str(label)] == 1: 
                     # the copy number of this node is 1 and it doesn’t bifurcate so it can exist for 0 time
@@ -649,68 +650,76 @@ def get_path_code(code_list):
     return(output)
 
 
-def timing_struct_to_BP_likelihood_per_chrom(data, timings, chrom, pre, mid, post):
+def timing_struct_to_BP_likelihood_per_chrom(data, timings, pre, mid, post):
 
     all_BP_likelihoods = []
 
-    for these_timings in timings[chrom]:
-        print(timings[chrom])
-        CNs, unique_CNs, branch_lengths, stacked_branch_lengths = get_branch_lengths(these_timings)
-
-        path = []
-        if pre > -1:
-            path += ["A"]*pre
-        if mid > -1:
-            path += ["GD"]
-        if mid > 0:
-            path += ["A"]*mid
-        if post > -1:
-            path += ["GD"]
-        if post > 0:
-            path += ["A"]*post
-
-        print("timings")
+    for these_timings in timings:
         print(these_timings)
-        print("copy numbers")
-        print(CNs)
-        print("branch lengths")
-        print(branch_lengths)
-        #>>> data = pickle.load(open("pre_mat129_u65_d10.precomputed.pickle",'rb'))
-        # in the keys are all the possible paths...
-        # each of these is a matrix that you can use to calculate the possible paths
+        if None in these_timings[3]:
+            BP_likelihoods = -1
+
+        else:
+            CNs, unique_CNs, branch_lengths, stacked_branch_lengths = get_branch_lengths(these_timings)
+
+            path = []
+            if pre > -1:
+                path += ["A"]*pre
+            if mid > -1:
+                path += ["GD"]
+            if mid > 0:
+                path += ["A"]*mid
+            if post > -1:
+                path += ["GD"]
+            if post > 0:
+                path += ["A"]*post
+
+            print("timings")
+            print(these_timings)
+            print("copy numbers")
+            print(CNs)
+            print("branch lengths")
+            print(branch_lengths)
+            #>>> data = pickle.load(open("pre_mat129_u65_d10.precomputed.pickle",'rb'))
+            # in the keys are all the possible paths...
+            # each of these is a matrix that you can use to calculate the possible paths
         
-        ends = these_timings[3]
-        starts = ends - branch_lengths
+            ends = these_timings[3]
+            starts = ends - branch_lengths
 
-        paths = np.zeros(ends.shape, dtype=float, order='C')
-        for row in range(branch_lengths.shape[0]):
-            for col in range(branch_lengths.shape[1]):
-                #print(path)
-                #print((row,col))
-                these_paths = path[starts[row][col]:ends[row][col]]
-                #print(these_paths)
-                path_code = get_path_code(these_paths)
-                #print(path_code)
+            paths = np.zeros(ends.shape, dtype=float, order='C')
+            for row in range(branch_lengths.shape[0]):
+                for col in range(branch_lengths.shape[1]):
+                    #print(path)
+                    #print((row,col))
+                    these_paths = path[starts[row][col]:ends[row][col]]
+                    #print(these_paths)
+                    path_code = get_path_code(these_paths)
+                    #print(path_code)
 
-                if labels[col] == '1':
-                    likelihood = data[path_code][1][1]
+                    if CNs[col] == '1':
+                        likelihood = data[path_code][1][1]
 
-                else:
-                    likelihood = data[path_code][1][2]
+                    elif CNs[col] == '0':
+                        likelihood = data[path_code][1][0]
 
-                paths[row][col] = likelihood
+                    else:
+                        likelihood = data[path_code][1][2]
 
-        print("starts")
-        print(starts)
-        print("ends")
-        print(ends)
-        print("codes")
-        print(paths)
+                    paths[row][col] = likelihood
 
-        ll = np.log(paths)
-        print(ll)
-        BP_likelihoods = np.sum(ll, axis=1)
-        print(BP_likelihoods)
+            print("starts")
+            print(starts)
+            print("ends")
+            print(ends)
+            print("codes")
+            print(paths)
+
+            ll = np.log(paths)
+            print(ll)
+            BP_likelihoods = np.sum(ll, axis=1)
+            print(BP_likelihoods)
+
         all_BP_likelihoods += [BP_likelihoods]
 
     return(all_BP_likelihoods)
@@ -725,8 +734,7 @@ def get_BP_likelihoods(timings,pre,mid,post,p_up,p_down):
     for chrom in timings.keys():
         BP_likelihoods[chrom]  = timing_struct_to_BP_likelihood_per_chrom(
                 data=data,
-                timings=timings,
-                chrom=chrom,
+                timings=timings[chrom],
                 pre=pre,
                 mid=mid,
                 post=post
@@ -742,7 +750,7 @@ def get_BP_likelihoods(timings,pre,mid,post,p_up,p_down):
 ##### 
 
 
-def get_poisson_loglikelihood(lengths,counts,branch_lengths,plambda):
+def get_poisson_loglikelihood(counts,stacked_branch_lengths,plambda):
     A = np.log(branch_lengths.astype(float) * plambda * lengths[chrom]) * counts
     B = -np.tile( [scipy.special.gammaln(x+1) for x in counts], (branch_lengths.shape[0],1))
     C = -branch_lengths * plambda
@@ -753,17 +761,21 @@ def get_poisson_loglikelihood(lengths,counts,branch_lengths,plambda):
 def get_all_poisson_loglikelihoods_per_chr(timings,plambda,BP_likelihoods,observed_SNV_multiplicities): # these "timings" are on a per chromosome basis
     SNV_likelihoods = []
     for i in range(len(timings)):
-        CNs, lengths_array, unique_CNs, branch_lengths, stacked_branch_lengths = get_branch_lengths(timings[i])
+        CNs, unique_CNs, branch_lengths, stacked_branch_lengths = get_branch_lengths(timings[i])
 
-        copies = []
+        counts = []
         for CN in unique_CNs:
             if int(CN) not in observed_SNV_multiplicities:
-                copies += [0]
+                counts += [0]
             else:
-                copies += [observed_SNV_multiplicities[int(CN)]]
+                counts += [observed_SNV_multiplicities[int(CN)]]
 
         # put together BP and poisson likelihoods
-        this_SNV_likelihood = get_poisson_loglikelihood(copies, stacked_branch_lengths, plambda) 
+        this_SNV_likelihood = get_poisson_loglikelihood(
+                counts=counts, 
+                stacked_branch_lengths=stacked_branch_lengths, 
+                plambda=plambda
+                ) 
 
         this_SNV_likelihood += BP_likelihoods[i]
 
@@ -779,7 +791,12 @@ def find_best_SNV_likelihood(plambda, timings, BP_likelihoods):
     chroms = timings.keys()
 
     for chrom in chroms:
-        SNV_likelihoods[chrom] = get_all_poisson_loglikelihoods_per_chr(timings[chrom], plambda, BP_likelihoods[chrom])
+        SNV_likelihoods[chrom] = get_all_poisson_loglikelihoods_per_chr(
+                timings=timings[chrom], 
+                plambda=plambda, 
+                BP_likelihoods=BP_likelihoods[chrom],
+                observed_SNV_multiplicities=observed_SNV_multiplicities
+                )
         best[chrom] = (-np.Inf, 0, 0) # the second entry is the tree and the third entry is the row of that timings tree
 
         for tree in range(len(SNV_likelihoods[chrom])):
