@@ -207,7 +207,7 @@ def count_CN_multiplicities(simulated_chromosomes):
 
 # for every copy number sum the precomputed values weighted against their multiplicity
 # then adjust for CN’s not being able to go to zero
-def CN_multiplicities_to_likelihoods(CN_multiplicities):
+def CN_multiplicities_to_likelihoods(observed_CN_multiplicities):
     # these relative references will need to be modified before publishing 
     def CN_filename(CN):
         return precomputed_file_folder + "/collated_128_p128_v3_"+str(CN)+".npy"
@@ -216,15 +216,15 @@ def CN_multiplicities_to_likelihoods(CN_multiplicities):
         return np.load(CN_filename(copy)) * multiplicity
 
     lls = None
-    for copy in CN_multiplicities:
+    for copy in observed_CN_multiplicities:
         if lls is None:
-            lls = ll(copy,CN_multiplicities[copy])
+            lls = ll(copy,observed_CN_multiplicities[copy])
 
         else:
-            lls += ll(copy,CN_multiplicities[copy])
+            lls += ll(copy,observed_CN_multiplicities[copy])
 
     # account for the inability to lose all copies of a particular chromosome:
-    likelihoods = np.exp(lls - np.log(1-np.exp(np.load(CN_filename(0)))) * CN_multiplicities[0])
+    likelihoods = np.exp(lls - np.log(1-np.exp(np.load(CN_filename(0)))) * observed_CN_multiplicities[0])
 
     # now we want to merge these computed likelihoods with the metadata columns:
     named_likelihoods = pkl.load(open(precomputed_file_folder+"/collated_128_p128_v3_list.pickle",'rb'))
@@ -607,90 +607,88 @@ def find_best_SNV_likelihood(plambda, timings, BP_probs):
     return(total,best) # also need to return which tree is the best and which row of that tree is the best.    
 
 
-print("START")
-pre = 2
-mid = 2
-post = -1
-p_up=0.3
-p_down=0.3
-rate = 10
-
-true_pre = pre
-true_mid = mid
-true_post = post
-true_p_up = p_up
-true_p_down = p_down
-true_rate = rate
-
-simulated_chromosomes = simulate_single_with_poisson_timestamps_names(
-        p_up=p_up, 
-        p_down=p_down, 
-        pre=pre, 
-        mid=mid, 
-        post=post, 
-        rate=rate)
-
-print("copynumber multiplicities")
-observed_CN_multiplicities = count_CN_multiplicities(simulated_chromosomes=simulated_chromosomes)
-print(observed_CN_multiplicities)
-
-print("loglikelihoods")
-likelihoods = CN_multiplicities_to_likelihoods(observed_CN_multiplicities=observed_CN_multiplicities)
-print(likelihoods)
-
-do_steps_123 = True 
-
 def likelihoods_to_marginal_likelihoods(likelihoods):
-    aggregated_likelihoods = likelihoods#.copy()
-    aggregated_likelihoods["mean_p_up"]   = aggregated_likelihoods["p_up"]  *aggregated_likelihoods["likelihood"]
-    aggregated_likelihoods["mean_p_down"] = aggregated_likelihoods["p_down"]*aggregated_likelihoods["likelihood"]
-    aggregated_likelihoods = aggregated_likelihoods.groupby(["path"], as_index=False)[['likelihood','mean_p_up','mean_p_down']].sum()
-    aggregated_likelihoods.dropna(axis=0)
-    aggregated_likelihoods.sort_values(by=['likelihood'], inplace=True, ascending=False)
-    total = sum(aggregated_likelihoods["likelihood"]) 
-    aggregated_likelihoods["mean_p_up"] /= total
-    aggregated_likelihoods["mean_p_down"] /= total
+    marginal_likelihoods = likelihoods#.copy()
+    marginal_likelihoods["mean_p_up"]   = marginal_likelihoods["p_up"]  *marginal_likelihoods["likelihood"]
+    marginal_likelihoods["mean_p_down"] = marginal_likelihoods["p_down"]*marginal_likelihoods["likelihood"]
+    marginal_likelihoods = marginal_likelihoods.groupby(["path"], as_index=False)[['likelihood','mean_p_up','mean_p_down']].sum()
+    marginal_likelihoods.dropna(axis=0)
+    marginal_likelihoods.sort_values(by=['likelihood'], inplace=True, ascending=False)
+    total = sum(marginal_likelihoods["likelihood"]) 
+    marginal_likelihoods["mean_p_up"] /= total
+    marginal_likelihoods["mean_p_down"] /= total
     print("best marginal likelihoods")
-    print(aggregated_likelihoods[:][0:20].to_string())
-    print(sum(aggregated_likelihoods["likelihood"]))
+    print(marginal_likelihoods[:][0:20].to_string())
+    print(sum(marginal_likelihoods["likelihood"]))
 
-    return(aggregated_likelihood)
+    return(marginal_likelihoods)
 
-print("marginals")
-marginals = likelihoods_to_marginal_likelihoods(likelihoods)
-
-if do_steps_123:
-
-    # now we need to know the indicies of these likelihoods
-
-
-
-
-    # I don't think the mean values are the best values to use, but they are the easiest to compute for now
-    # it would also be easy to switch to the maximum values, so perhaps do that
-
-    # need to save the important datastructures up to hear and then just work onwards from here to speed up development
-    d = shelve.open('file.txt')           # in this file you will save your variables
-    #d['named_likelihoods'] = named_likelihoods             # thats all, but note the name for later.
-    d['aggregated_likelihoods'] = aggregated_likelihoods
-    d['simulated_chromosomes'] = simulated_chromosomes
-    d['observed_CN_multiplicities'] = observed_CN_multiplicities
-    d['likelihoods'] = likelihoods
-    d.close()
 
 def path_code_to_pre_mid_post(path):
     bits = [int(x) for x in path.split("G")] + [-1,-1]
     pre, mid, post = bits[0:3]
     return((pre,mid,post))
 
-import shelve
-d = shelve.open('file.txt')
-#named_likelihoods = d['named_likelihoods']
-aggregated_likelihoods = d['aggregated_likelihoods']
-simulated_chromosomes = d['simulated_chromosomes']
-observed_CN_multiplicities = d['observed_CN_multiplicities']
-likelihoods = d['likelihoods']
-d.close()
+
+print("START")
+do_simulation = True
+cache_results = True
+
+if do_simulation:
+    pre = 2
+    mid = 2
+    post = -1
+    p_up=0.3
+    p_down=0.3
+    rate = 10
+
+    true_pre = pre
+    true_mid = mid
+    true_post = post
+    true_p_up = p_up
+    true_p_down = p_down
+    true_rate = rate
+
+    simulated_chromosomes = simulate_single_with_poisson_timestamps_names(
+            p_up=p_up, 
+            p_down=p_down, 
+            pre=pre, 
+            mid=mid, 
+            post=post, 
+            rate=rate)
+
+    print("copynumber multiplicities")
+    observed_CN_multiplicities = count_CN_multiplicities(simulated_chromosomes=simulated_chromosomes)
+    print(observed_CN_multiplicities)
+
+    print("loglikelihoods")
+    likelihoods = CN_multiplicities_to_likelihoods(observed_CN_multiplicities=observed_CN_multiplicities)
+    print(likelihoods)
+
+    print("marginals")
+    marginal_likelihoods = likelihoods_to_marginal_likelihoods(likelihoods=likelihoods)
+    print(marginal_likelihoods)
+
+    if cache_results:
+        # need to save the important datastructures up to hear and then just work onwards from here to speed up development
+        d = shelve.open('file.txt')           
+        # in d is a dictionary type file that you can save variables:
+        d['likelihoods'] = likelihoods
+        d['marginal_likelihoods'] = marginal_likelihoods
+        d['simulated_chromosomes'] = simulated_chromosomes
+        d['observed_CN_multiplicities'] = observed_CN_multiplicities
+        d.close()
+
+if not do_simulation:
+    # then load the most recently cached result:
+    import shelve
+    d = shelve.open('file.txt')
+    likelihoods = d['likelihoods']
+    marginal_likelihoods = d['marginal_likelihoods']
+    simulated_chromosomes = d['simulated_chromosomes']
+    observed_CN_multiplicities = d['observed_CN_multiplicities']
+    d.close()
+
 
 # STEP 4; 
 
@@ -699,9 +697,9 @@ observed_SNV_multiplicities = count_SNV_multiplicities(simulated_chromosomes)
 print(observed_SNV_multiplicities)
 
 
-path = aggregated_likelihoods["path"].iloc[0]
-p_up = aggregated_likelihoods['mean_p_up'].iloc[0].round(decimals = 2)
-p_down = aggregated_likelihoods['mean_p_down'].iloc[0].round(decimals = 2)
+path = marginal_likelihoods["path"].iloc[0]
+p_up = marginal_likelihoods['mean_p_up'].iloc[0].round(decimals = 2)
+p_down = marginal_likelihoods['mean_p_down'].iloc[0].round(decimals = 2)
 pre, mid, post = path_code_to_pre_mid_post(path)
 
 
