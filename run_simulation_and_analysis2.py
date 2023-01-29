@@ -190,12 +190,17 @@ def simulate_single_with_poisson_timestamps_names(p_up,p_down,pre,mid,post,rate)
 #####
 
 # count the number of each parental specific copy number found in the genome
-def count_CN_multiplicities(simulated_chromosomes):
-    multiplicities = {}
-
+def count_CNs(simulated_chromosomes):
+    observed_CNs = {}
     for chrom_type in simulated_chromosomes:
-        CNs = [len([x for x in simulated_chromosomes[chrom_type] if paternal == x["paternal"]]) for paternal in [True,False]]
+        observed_CNs[chrom_type] = [len([x for x in simulated_chromosomes[chrom_type] if paternal == x["paternal"]]) for paternal in [True,False]]
 
+    return(observed_CNs)
+
+def count_CN_multiplicities(observed_CNs):
+    multiplicities = {}
+    
+    for chrom_type in observed_CNs:
         for CN in CNs:
             if CN not in multiplicities: 
                 multiplicities[CN] = 1
@@ -207,7 +212,7 @@ def count_CN_multiplicities(simulated_chromosomes):
 
 # for every copy number sum the precomputed values weighted against their multiplicity
 # then adjust for CN’s not being able to go to zero
-def CN_multiplicities_to_likelihoods(observed_CN_multiplicities):
+def CN_multiplicities_to_likelihoods(observed_CNs):
     # these relative references will need to be modified before publishing 
     def CN_filename(CN):
         return precomputed_file_folder + "/collated_128_p128_v3_"+str(CN)+".npy"
@@ -216,32 +221,51 @@ def CN_multiplicities_to_likelihoods(observed_CN_multiplicities):
         return np.load(CN_filename(copy)) * multiplicity
 
     lls = None
-    for copy in observed_CN_multiplicities:
+    for copy in observed_CNs:
         if lls is None:
-            lls = ll(copy,observed_CN_multiplicities[copy])
+            lls = ll(copy,observed_CNs[copy])
 
         else:
-            lls += ll(copy,observed_CN_multiplicities[copy])
+            lls += ll(copy,observed_CNs[copy])
 
     # account for the inability to lose all copies of a particular chromosome:
-    likelihoods = np.exp(lls - np.log(1-np.exp(np.load(CN_filename(0)))) * observed_CN_multiplicities[0])
+    likelihoods = np.exp(lls - np.log(1-np.exp(np.load(CN_filename(0)))) * observed_CNs[0])
 
     # now we want to merge these computed likelihoods with the metadata columns:
     named_likelihoods = pkl.load(open(precomputed_file_folder+"/collated_128_p128_v3_list.pickle",'rb'))
 
     named_likelihoods.insert(3,"likelihood",likelihoods,True)
     named_likelihoods.columns = ["p_up","p_down","path","likelihood"]
-    # named_likelihoods.replace([np.inf, -np.inf], np.nan, inplace=True)
+    named_likelihoods.replace([np.inf,-np.inf], np.nan, inplace=True)
+    # would like to investigate further as to what np.inf is
     named_likelihoods.dropna(axis=0)
     named_likelihoods.sort_values(by=['likelihood'], inplace=True, ascending=False)
+
     total = np.nansum(named_likelihoods["likelihood"])
-    print(total)
+    print("total likelihood sum to normalise: "+str(total))
     named_likelihoods["likelihood"] /= total
     print("best likelihoods")
     print(named_likelihoods[:][0:300].to_string())
 
     return(named_likelihoods)
 
+
+def likelihoods_to_marginal_likelihoods(likelihoods):
+    marginal_likelihoods = likelihoods#.copy()
+    marginal_likelihoods["mean_p_up"]   = marginal_likelihoods["p_up"]  *marginal_likelihoods["likelihood"]
+    marginal_likelihoods["mean_p_down"] = marginal_likelihoods["p_down"]*marginal_likelihoods["likelihood"]
+    marginal_likelihoods = marginal_likelihoods.groupby(["path"], as_index=False)[['likelihood','mean_p_up','mean_p_down']].sum()
+    marginal_likelihoods.dropna(axis=0)
+    marginal_likelihoods.sort_values(by=['likelihood'], inplace=True, ascending=False)
+    total = sum(marginal_likelihoods["likelihood"]) 
+    print("total marginal liklihoods sum to normalise: "+str(total))
+    marginal_likelihoods["mean_p_up"] /= marginal_likelihoods["likelihood"] 
+    marginal_likelihoods["mean_p_down"] /= marginal_likelihoods["likelihood"]
+    print("best marginal likelihoods")
+    print(marginal_likelihoods[:][0:20].to_string())
+    print(sum(marginal_likelihoods["likelihood"]))
+
+    return(marginal_likelihoods)
 ###### STEP 3; recalculate the top branching process loglikelihoods by incorporating the SNV data under a poisson model
 ###### STEP 3a; calculate the SNV multiplicities of each chromosome
 ######
@@ -361,16 +385,16 @@ def complete_trees(trees):
 
 
 # from the multiplicity counts of the chromosomes and the SNVs generate all the possible trees of every copy number:
-def generate_trees(chrom_CNs,SNV_CNs):
+def generate_trees(observed_CNs,SNV_CNs):
     SNV_CNs.sort(reverse = True)
-    chrom_CNs.sort(reverse = True)
+    observed_CNs.sort(reverse = True)
     # print("SNV_CNs")
     # print(SNV_CNs)
-    # print("chrom_CNs")
-    # print(chrom_CNs)
+    # print("observed_CNs")
+    # print(observed_CNs)
 
     # initially we start with the following tree for each chromosome:
-    trees = [(sum(chrom_CNs),(max(chrom_CNs),),(min(chrom_CNs),))]
+    trees = [(sum(observed_CNs),(max(observed_CNs),),(min(observed_CNs),))]
 
     for SNV_CN in SNV_CNs:
         # to save computational complexity we generate only trees from SNVs with copy numbers greater than 1
@@ -382,11 +406,11 @@ def generate_trees(chrom_CNs,SNV_CNs):
  
         if trees_with_new_node == []:
             # then there isn’t anywhere left to insert the new node into these trees
-            # this shouldn’t happen unless this SNV_CN is also in our chrom_CNs
-            assert(SNV_CN in chrom_CNs)
+            # this shouldn’t happen unless this SNV_CN is also in our observed_CNs
+            assert(SNV_CN in observed_CNs)
             continue
 
-        if SNV_CN in chrom_CNs:
+        if SNV_CN in observed_CNs:
             # then it has already been inserted into the tree once in the first branch split
             # we still need to attempt inserting it again it might present in the alternative tree branch
             trees = trees + trees_with_new_node
@@ -410,6 +434,32 @@ def generate_trees(chrom_CNs,SNV_CNs):
     trees = list(set(trees))
 
     return(trees)
+
+def get_all_trees_and_timings(observed_SNV_multiplicities, observed_CNs):
+    all_trees = {}
+    timings = {}
+    for chrom in observed_SNV_multiplicities:
+        print("###CHROM: "+str(chrom))
+        print("chromosomal CNs: " + str(observed_CNs[chrom]))
+        print("observed_SNV_multiplicities: "+str(observed_SNV_multiplicities[chrom]))
+        all_trees[chrom] = generate_trees( 
+            observed_CNs = observed_CNs[chrom],
+            SNV_CNs = list(observed_SNV_multiplicities[chrom].keys())
+                )
+
+        print("trees:")
+        for tree in all_trees[chrom]:
+            print(tree)
+
+        epochs = pre+mid+post+(mid>=0)+(post>=0)
+
+        timings[chrom] = [get_timings_per_tree(x,epochs,observed_SNV_multiplicities[chrom]) for x in all_trees[chrom]]
+
+        print("timings")
+        print(timings[chrom])
+    
+    return(all_trees, timings)
+
 
 ##### STEP 3c; now that all trees have been created, calculate all possible timings for each tree
 ##### 
@@ -607,21 +657,6 @@ def find_best_SNV_likelihood(plambda, timings, BP_probs):
     return(total,best) # also need to return which tree is the best and which row of that tree is the best.    
 
 
-def likelihoods_to_marginal_likelihoods(likelihoods):
-    marginal_likelihoods = likelihoods#.copy()
-    marginal_likelihoods["mean_p_up"]   = marginal_likelihoods["p_up"]  *marginal_likelihoods["likelihood"]
-    marginal_likelihoods["mean_p_down"] = marginal_likelihoods["p_down"]*marginal_likelihoods["likelihood"]
-    marginal_likelihoods = marginal_likelihoods.groupby(["path"], as_index=False)[['likelihood','mean_p_up','mean_p_down']].sum()
-    marginal_likelihoods.dropna(axis=0)
-    marginal_likelihoods.sort_values(by=['likelihood'], inplace=True, ascending=False)
-    total = sum(marginal_likelihoods["likelihood"]) 
-    marginal_likelihoods["mean_p_up"] /= total
-    marginal_likelihoods["mean_p_down"] /= total
-    print("best marginal likelihoods")
-    print(marginal_likelihoods[:][0:20].to_string())
-    print(sum(marginal_likelihoods["likelihood"]))
-
-    return(marginal_likelihoods)
 
 
 def path_code_to_pre_mid_post(path):
@@ -657,11 +692,15 @@ if do_simulation:
             post=post, 
             rate=rate)
 
-    print("copynumber multiplicities")
-    observed_CN_multiplicities = count_CN_multiplicities(simulated_chromosomes=simulated_chromosomes)
+    print("observed chromosomal copynumbers")
+    observed_CNs = count_CNs(simulated_chromosomes=simulated_chromosomes)
+    print(observed_CNs)
+
+    print("observed copynumber multiplicities")
+    observed_CN_multiplicities = count_CN_multiplicities(observed_CNs=observed_CNs)
     print(observed_CN_multiplicities)
 
-    print("loglikelihoods")
+    print("likelihoods")
     likelihoods = CN_multiplicities_to_likelihoods(observed_CN_multiplicities=observed_CN_multiplicities)
     print(likelihoods)
 
@@ -673,20 +712,20 @@ if do_simulation:
         # need to save the important datastructures up to hear and then just work onwards from here to speed up development
         d = shelve.open('file.txt')           
         # in d is a dictionary type file that you can save variables:
+        d['simulated_chromosomes'] = simulated_chromosomes
+        d['observed_CNs'] = observed_CNs
         d['likelihoods'] = likelihoods
         d['marginal_likelihoods'] = marginal_likelihoods
-        d['simulated_chromosomes'] = simulated_chromosomes
-        d['observed_CN_multiplicities'] = observed_CN_multiplicities
         d.close()
 
 if not do_simulation:
     # then load the most recently cached result:
     import shelve
     d = shelve.open('file.txt')
+    simulated_chromosomes = d['simulated_chromosomes']
+    observed_CNs = d['observed_CNs']
     likelihoods = d['likelihoods']
     marginal_likelihoods = d['marginal_likelihoods']
-    simulated_chromosomes = d['simulated_chromosomes']
-    observed_CN_multiplicities = d['observed_CN_multiplicities']
     d.close()
 
 
@@ -696,59 +735,31 @@ print("SNV multiplicities")
 observed_SNV_multiplicities = count_SNV_multiplicities(simulated_chromosomes)
 print(observed_SNV_multiplicities)
 
+SEARCH_DEPTH = 4
+for res in range(SEARCH_DEPTH):
+    path = marginal_likelihoods["path"].iloc[res]
+    p_up = marginal_likelihoods['mean_p_up'].iloc[res].round()
+    p_down = marginal_likelihoods['mean_p_down'].iloc[res].round()
+    pre, mid, post = path_code_to_pre_mid_post(path)
 
-path = marginal_likelihoods["path"].iloc[0]
-p_up = marginal_likelihoods['mean_p_up'].iloc[0].round(decimals = 2)
-p_down = marginal_likelihoods['mean_p_down'].iloc[0].round(decimals = 2)
-pre, mid, post = path_code_to_pre_mid_post(path)
+    if res == SEARCH_DEPTH - 1:
+        p_up = real_p_up
+        p_down = real_p_down
+        pre = real_pre
+        mid = real_mid
+        post = real_post
 
+    print("calculate joint SNV-CN likelihood")
+    print("pre: "+ str(pre))
+    print("mid: "+str(mid))
+    print("post: "+str(post))
 
-print("calc likelihood")
-print("pre: "+ str(pre))
-print("mid: "+str(mid))
-print("post: "+str(post))
+    SNV_CN_likelihoods = {}
 
-all_trees = {}
-filled_trees = {}
-timings = {}
-SNV_likelihoods = {}
-
-#def count_CN_pairs(simulated_chromosomes):
-#    # count how many of each chromosomal pair there are:
-#    return( [len([x for x in simulated_chromosomes if x["paternal"] == paternal]) for paternal in [True,False]] )
-#
-#def count_CN_pairs(simulated_chromosomes):
-#    chrom_CNs = {}
-#    for chrom in simulated_chromosomes:
-#        chrom_CNs[chrom] = count_CN_pairs(simulated_chromosomes=simulated_chromosomes)
-#
-#    return(chrom_CNs)
-
-chrom_CNs = count_chrom_CN_multiplicities(simulated_chromosomes)
-for chrom in observed_SNV_multiplicities:
-    print("###CHROM: "+str(chrom))
-
-    print("chromosomal CNs")
-    print(chrom_CNs[chrom])
-    print("observed_SNV_multiplicities")
-    print(observed_SNV_multiplicities[chrom])
-    all_trees[chrom] = generate_trees(
-            chrom_CNs= list(chrom_CNs[chrom].values()),
-            SNV_CNs= list(observed_SNV_multiplicities[chrom].keys())
+    all_trees, timings = get_all_trees_and_timings(
+            observed_SNV_multiplicities = observed_SNV_multiplicities,
+            observed_CNs = observed_CNs
             )
-    print("trees:")
-    for tree in all_trees[chrom]:
-        print(tree)
-
-    epochs = pre+mid+post+(mid>=0)+(post>=0)
-
-    timings[chrom] = [get_timings_per_tree(x,epochs,observed_SNV_multiplicities[chrom]) for x in all_trees[chrom]]
-
-    print("timings")
-    print(timings[chrom])
-
-    print("num trees: "+ str(len(all_trees[chrom])))
-    print("num filled trees: " + str(len(all_trees[chrom])))
 
 
 print(timings.keys())
