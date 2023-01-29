@@ -1,3 +1,5 @@
+# import the required libraries
+
 import numpy as np
 import copy
 import pickle as pkl
@@ -5,6 +7,9 @@ import re
 from more_itertools import locate
 import shelve
 import scipy
+
+# precomputed files
+precomputed_file_folder = "/vast/scratch/users/lmcintosh/GD2/GD/"
 
 
 ##### STEP 1; WRITE A FUNCTION THAT CAN SIMULATE A GENOME
@@ -15,7 +20,7 @@ import scipy
 #####
 
 # copied from http://www.insilicase.com/Web/Chromlen.aspx
-# Percent of total Female genome
+# Percent of total (Female) genome
 lengths = {0:8.18,
         1:8.04,
         2:8.60,
@@ -40,8 +45,6 @@ lengths = {0:8.18,
         21:1.64,
         22:5.13
         }
-# test 2
-# TEST
 
 # lengths is a dictionary of rate adjustment parameters. 
 # these parameters adjust the rate of how frequently SNVs occur per genome, so that longer chromosomes have a proportionally larger chance of a new SNV
@@ -56,7 +59,7 @@ def count_paternity(chromosomes,paternal):
     return( len([x for x in chromosomes if paternal == x["paternal"]]) )
 
 
-def simulate_single_with_poisson_timestamps_names(pup,pdown,pre,mid,post,rate):
+def simulate_single_with_poisson_timestamps_names(p_up,p_down,pre,mid,post,rate):
     # this function simulates the evolution of a cancer genome with whole chromosome copy number changes and SNV's
     # pre, mid and post model the number of epochs / cell cycles that this genome undergoes. 
     # pre is the number of epochs that occur before the first round of genome doubling, if there is one
@@ -131,10 +134,10 @@ def simulate_single_with_poisson_timestamps_names(pup,pdown,pre,mid,post,rate):
                     new_chromosomes = []
                     for chrom in simulated_chromosomes[chrom_type]:
                         # randomly draw from 
-                        #    losing this chromosome with probability pdown, 
-                        #    gaining another copy of this chromosome with probability pup,
-                        #    nothing happening with probability 1 - pup - down:
-                        change = np.random.choice([1,0,-1], 1, p=[pup,1-pup-pdown,pdown])
+                        #    losing this chromosome with probability p_down, 
+                        #    gaining another copy of this chromosome with probability p_up,
+                        #    nothing happening with probability 1 - p_up - down:
+                        change = np.random.choice([1,0,-1], 1, p=[p_up,1-p_up-p_down,p_down])
 
                         if change == 0:
                             # keep the old chromosome only
@@ -156,7 +159,7 @@ def simulate_single_with_poisson_timestamps_names(pup,pdown,pre,mid,post,rate):
                             continue
 
                     # ensure that there is always at least one copy of every chromosome
-                    if length(new_chromosomes) != 0:
+                    if len(new_chromosomes) != 0:
                         break 
                
                 # add those chromosomes into the genome
@@ -183,7 +186,7 @@ def simulate_single_with_poisson_timestamps_names(pup,pdown,pre,mid,post,rate):
 #####
 
 # we cannot being to introduce the information that the SNVs provide just yet due to the computational complexity 
-# of iterating over every SNV structure for each location “(pup,pdown,pre,mid,post)” in the domain  
+# of iterating over every SNV structure for each location “(p_up,p_down,pre,mid,post)” in the domain  
 
 
 #def count_chrom_CN_pairs(simulated_chromosomes):
@@ -227,7 +230,7 @@ def count_CN_multiplicities(simulated_chromosomes):
 def CN_multiplicities_to_likelihoods(CN_multiplicities):
     # these relative references will need to be modified before publishing 
     def CN_filename(CN):
-        return "../collated_128_p128_v3_"+str(CN)+".npy"
+        return precomputed_file_folder + "/collated_128_p128_v3_"+str(CN)+".npy"
 
     def ll(copy,multiplicity):
         return np.load(CN_filename(copy)) * multiplicity
@@ -643,7 +646,14 @@ if do_steps_123:
     true_p_down = p_down
     true_rate = rate
 
-    simulated_chromosomes = simulate_single_with_poisson_timestamps_names(p_up=pup, p_down=pdown, pre=pre, mid=mid, post=post, rate=rate)
+    simulated_chromosomes = simulate_single_with_poisson_timestamps_names(
+            p_up=p_up, 
+            p_down=p_down, 
+            pre=pre, 
+            mid=mid, 
+            post=post, 
+            rate=rate)
+
     simulated_chromosomes_copy = copy.deepcopy(simulated_chromosomes)
     for chrom_type in simulated_chromosomes_copy:
         print(chrom_type)
@@ -669,10 +679,10 @@ if do_steps_123:
     # now we need to know the indicies of these likelihoods
 
 
-    named_likelihoods = pkl.load(open("../collated_128_p128_v3_list.pickle",'rb'))
-    #named_likelihoods.rename(columns={'0': 'pup', '1': 'pdown', '2': 'path'}, inplace=True)
+    named_likelihoods = pkl.load(open(precomputed_file_folder+"/collated_128_p128_v3_list.pickle",'rb'))
+    #named_likelihoods.rename(columns={'0': 'p_up', '1': 'p_down', '2': 'path'}, inplace=True)
     named_likelihoods.insert(3,"likelihood",likelihoods,True)
-    named_likelihoods.columns = ["pup","pdown","path","likelihood"]
+    named_likelihoods.columns = ["p_up","p_down","path","likelihood"]
     named_likelihoods.replace([np.inf, -np.inf], np.nan, inplace=True)
     named_likelihoods.dropna(axis=0)
     named_likelihoods.sort_values(by=['likelihood'], inplace=True, ascending=False)
@@ -683,14 +693,14 @@ if do_steps_123:
     print(named_likelihoods[:][0:300].to_string())
 
     aggregated_likelihoods = named_likelihoods.copy()
-    aggregated_likelihoods["mean_pup"]   = aggregated_likelihoods["pup"]  *aggregated_likelihoods["likelihood"]
-    aggregated_likelihoods["mean_pdown"] = aggregated_likelihoods["pdown"]*aggregated_likelihoods["likelihood"]
-    aggregated_likelihoods = aggregated_likelihoods.groupby(["path"], as_index=False)['likelihood','mean_pup','mean_pdown'].sum()
+    aggregated_likelihoods["mean_p_up"]   = aggregated_likelihoods["p_up"]  *aggregated_likelihoods["likelihood"]
+    aggregated_likelihoods["mean_p_down"] = aggregated_likelihoods["p_down"]*aggregated_likelihoods["likelihood"]
+    aggregated_likelihoods = aggregated_likelihoods.groupby(["path"], as_index=False)['likelihood','mean_p_up','mean_p_down'].sum()
     aggregated_likelihoods.dropna(axis=0)
     aggregated_likelihoods.sort_values(by=['likelihood'], inplace=True, ascending=False)
     total = sum(aggregated_likelihoods["likelihood"]) 
-    aggregated_likelihoods["mean_pup"] /= total
-    aggregated_likelihoods["mean_pdown"] /= total
+    aggregated_likelihoods["mean_p_up"] /= total
+    aggregated_likelihoods["mean_p_down"] /= total
     print("best marginal likelihoods")
     print(aggregated_likelihoods[:][0:20].to_string())
     print(sum(aggregated_likelihoods["likelihood"]))
@@ -729,8 +739,8 @@ print(observed_SNV_multiplicities)
 
 
 path = aggregated_likelihoods["path"].iloc[0]
-pup = aggregated_likelihoods['mean_pup'].iloc[0].round(decimals = 2)
-pdown = aggregated_likelihoods['mean_pdown'].iloc[0].round(decimals = 2)
+p_up = aggregated_likelihoods['mean_p_up'].iloc[0].round(decimals = 2)
+p_down = aggregated_likelihoods['mean_p_down'].iloc[0].round(decimals = 2)
 pre, mid, post = path_code_to_pre_mid_post(path)
 
 
@@ -872,12 +882,12 @@ def timing_struct_to_BP_likelihood(data, timings, chrom, pre, mid, post, up, dow
     return(all_BP_probs)
 
 
-data = pkl.load(open("../precomputed/store_pre_pickle/pre_mat129_u"+str(int(100*pup))+"_d"+str(int(100*pdown))+".precomputed.pickle",'rb'))
+data = pkl.load(open("../precomputed/store_pre_pickle/pre_mat129_u"+str(int(100*p_up))+"_d"+str(int(100*p_down))+".precomputed.pickle",'rb'))
 print("###########\n"*10)
 BP_probs = {}
 for chrom in timings.keys():
     print(chrom)
-    BP_probs[chrom]  = timing_struct_to_BP_likelihood(data,timings,chrom,pre=pre,mid=mid,post=post,up=pup,down=pdown)
+    BP_probs[chrom]  = timing_struct_to_BP_likelihood(data,timings,chrom,pre=pre,mid=mid,post=post,up=p_up,down=p_down)
 
 
 
