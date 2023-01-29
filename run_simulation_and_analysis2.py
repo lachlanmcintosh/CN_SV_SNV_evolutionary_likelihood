@@ -435,31 +435,6 @@ def generate_trees(observed_CNs,SNV_CNs):
 
     return(trees)
 
-def get_all_trees_and_timings(observed_SNV_multiplicities, observed_CNs):
-    all_trees = {}
-    timings = {}
-    for chrom in observed_SNV_multiplicities:
-        print("###CHROM: "+str(chrom))
-        print("chromosomal CNs: " + str(observed_CNs[chrom]))
-        print("observed_SNV_multiplicities: "+str(observed_SNV_multiplicities[chrom]))
-        all_trees[chrom] = generate_trees( 
-            observed_CNs = observed_CNs[chrom],
-            SNV_CNs = list(observed_SNV_multiplicities[chrom].keys())
-                )
-
-        print("trees:")
-        for tree in all_trees[chrom]:
-            print(tree)
-
-        epochs = pre+mid+post+(mid>=0)+(post>=0)
-
-        timings[chrom] = [get_timings_per_tree(x,epochs,observed_SNV_multiplicities[chrom]) for x in all_trees[chrom]]
-
-        print("timings")
-        print(timings[chrom])
-    
-    return(all_trees, timings)
-
 
 ##### STEP 3c; now that all trees have been created, calculate all possible timings for each tree
 ##### 
@@ -561,6 +536,33 @@ def get_timings_per_tree(tree,epochs,copy_dict):
 
     return((tree, labelled_tree, count, timings, parents))
 
+
+def get_all_trees_and_timings(observed_SNV_multiplicities, observed_CNs):
+    all_trees = {}
+    timings = {}
+    for chrom in observed_SNV_multiplicities:
+        print("###CHROM: "+str(chrom))
+        print("chromosomal CNs: " + str(observed_CNs[chrom]))
+        print("observed_SNV_multiplicities: "+str(observed_SNV_multiplicities[chrom]))
+        all_trees[chrom] = generate_trees( 
+            observed_CNs = observed_CNs[chrom],
+            SNV_CNs = list(observed_SNV_multiplicities[chrom].keys())
+                )
+
+        print("trees:")
+        for tree in all_trees[chrom]:
+            print(tree)
+
+        epochs = pre+mid+post+(mid>=0)+(post>=0)
+
+        timings[chrom] = [get_timings_per_tree(x,epochs,observed_SNV_multiplicities[chrom]) for x in all_trees[chrom]]
+
+        print("timings")
+        print(timings[chrom])
+    
+    return(all_trees, timings)
+
+
 ##### STEP 3d; now that all timing arrays for the nodes of each tree have been created, calculate the likelihoods from them
 ##### 
 ##### 
@@ -612,7 +614,88 @@ def get_poisson_loglikelihood(lengths,counts,branch_lengths,plambda):
     total = np.sum(A + B + C, axis=1)
     return(total)
 
-def get_all_poisson_loglikelihoods_per_chr(timings,plambda,BP_probs,observed_SNV_multiplicities): # these "timings" are on a per chromosome basis
+def timing_struct_to_BP_likelihood_per_chrom(data, timings, chrom, pre, mid, post, up, down):
+
+    all_BP_likelihoods = []
+
+    for these_timings in timings[chrom]:
+        labels, lengths_array, unique_labels, branch_lengths, stacked_branch_lengths = get_branch_lengths(these_timings)
+
+        path = []
+        if pre > -1:
+            path += ["A"]*pre
+        if mid > -1:
+            path += ["GD"]
+        if mid > 0:
+            path += ["A"]*mid
+        if post > -1:
+            path += ["GD"]
+        if post > 0:
+            path += ["A"]*post
+
+        print("timings")
+        print(these_timings)
+        print("labels")
+        print(labels)
+        print("lengths")
+        print(lengths_array)
+        #>>> data = pickle.load(open("pre_mat129_u65_d10.precomputed.pickle",'rb'))
+        # in the keys are all the possible paths...
+        # each of these is a matrix that you can use to calculate the possible paths
+        
+        ends = these_timings[3]
+        starts = ends - lengths_array
+
+        paths = np.zeros(ends.shape, dtype=float, order='C')
+        for row in range(lengths_array.shape[0]):
+            for col in range(lengths_array.shape[1]):
+                #print(path)
+                #print((row,col))
+                these_paths = path[starts[row][col]:ends[row][col]]
+                #print(these_paths)
+                path_code = get_path_code(these_paths)
+                #print(path_code)
+
+                if labels[col] == '1':
+                    likelihood = data[path_code][1][1]
+
+                else:
+                    likelihood = data[path_code][1][2]
+
+                paths[row][col] = likelihood
+
+        print("starts")
+        print(starts)
+        print("ends")
+        print(ends)
+        print("codes")
+        print(paths)
+
+        ll = np.log(paths)
+        print(ll)
+        BP_likelihoods = np.sum(ll, axis=1)
+        print(BP_likelihoods)
+        all_BP_likelihoods += [BP_likelihoods]
+
+    return(all_BP_likelihoods)
+
+def get_BP_likelihoods(timings,pre,mid,post,p_up,p_down):
+    data = pkl.load(open("../precomputed/store_pre_pickle/pre_mat129_u"+str(int(p_up))+"_d"+str(int(p_down))+".precomputed.pickle",'rb'))
+    BP_likelihoods = {}
+    for chrom in timings.keys():
+        BP_likelihoods[chrom]  = timing_struct_to_BP_likelihood_per_chrom(
+                data=data,
+                timings=timings,
+                chrom=chrom,
+                pre=pre,
+                mid=mid,
+                post=post,
+                p_up=p_up,
+                p_down=p_down
+                )
+    return(BP_likelihoods)
+
+def get_all_poisson_loglikelihoods_per_chr(timings,plambda,BP_likelihoods,observed_SNV_multiplicities): # these "timings" are on a per chromosome basis
     SNV_likelihoods = []
     for i in range(len(timings)):
         CNs, lengths_array, unique_CNs, branch_lengths, stacked_branch_lengths = get_branch_lengths(timings[i])
@@ -627,20 +710,20 @@ def get_all_poisson_loglikelihoods_per_chr(timings,plambda,BP_probs,observed_SNV
         # put together BP and poisson likelihoods
         this_SNV_likelihood = get_poisson_loglikelihood(copies, stacked_branch_lengths, plambda) 
 
-        this_SNV_likelihood += BP_probs[i]
+        this_SNV_likelihood += BP_likelihoods[i]
 
         SNV_likelihoods += [this_SNV_likelihood]
 
     return(SNV_likelihoods)
 
-def find_best_SNV_likelihood(plambda, timings, BP_probs):
+def find_best_SNV_likelihood(plambda, timings, BP_likelihoods):
     SNV_likelihoods = {}
     best = {}
 
     chroms = timings.keys()
 
     for chrom in chroms:
-        SNV_likelihoods[chrom] = get_all_poisson_loglikelihoods_per_chr(timings[chrom], plambda, BP_probs[chrom])
+        SNV_likelihoods[chrom] = get_all_poisson_loglikelihoods_per_chr(timings[chrom], plambda, BP_likelihoods[chrom])
         best[chrom] = (-np.Inf, 0, 0) # the second entry is the tree and the third entry is the row of that timings tree
 
         for tree in range(len(SNV_likelihoods[chrom])):
@@ -656,7 +739,23 @@ def find_best_SNV_likelihood(plambda, timings, BP_probs):
 
     return(total,best) # also need to return which tree is the best and which row of that tree is the best.    
 
+def objective_function_SNV_loglik(plambda,timings,BP_likelihoods):
+    total,best = find_best_SNV_likelihood(plambda,timings,BP_likelihoods)
+    print(best)
+    return(-total)
 
+def get_path_code(code_list):
+    output = ""
+    count = 0
+    for i in range(len(code_list)):
+        if code_list[i] == "A":
+            count += 1
+        if code_list[i] == "GD":
+            output += str(count)
+            count = 0
+            output += "G"
+    output += str(count)
+    return(output)
 
 
 def path_code_to_pre_mid_post(path):
@@ -760,108 +859,22 @@ for res in range(SEARCH_DEPTH):
             observed_SNV_multiplicities = observed_SNV_multiplicities,
             observed_CNs = observed_CNs
             )
+    print("all trees: "+str(all_trees))
+    print("timings: "+str(timings))
 
+    # from scipy.optimize import NonlinearConstraint, Bounds
+    # output = scipy.optimize.minimize(fun=objective_function_SNV_loglik,x0=5,args=(timings))
+    # output = scipy.optimize.differential_evolution(func=objective_function_SNV_loglik,bounds=Bounds([0.], [20.]),args=(timings))
+    # need to reintroduce some sort of non array search for both the rate parameter AND p_up AND p_down
 
-print(timings.keys())
-def objective_function_SNV_loglik(plambda,timings,BP_probs):
-    total,best = find_best_SNV_likelihood(plambda,timings,BP_probs)
-    print(best)
-    return(-total)
-
-
-# from scipy.optimize import NonlinearConstraint, Bounds
-# output = scipy.optimize.minimize(fun=objective_function_SNV_loglik,x0=5,args=(timings))
-# output = scipy.optimize.differential_evolution(func=objective_function_SNV_loglik,bounds=Bounds([0.], [20.]),args=(timings))
-# need to reintroduce some sort of non array search for both the rate parameter AND p_up AND p_down
-
-
-print(timings)
-
-def get_path_code(code_list):
-    output = ""
-    count = 0
-    for i in range(len(code_list)):
-        if code_list[i] == "A":
-            count += 1
-        if code_list[i] == "GD":
-            output += str(count)
-            count = 0
-            output += "G"
-    output += str(count)
-    return(output)
-
-def timing_struct_to_BP_likelihood(data, timings, chrom, pre, mid, post, up, down):
-
-    all_BP_probs = []
-
-    for these_timings in timings[chrom]:
-        labels, lengths_array, unique_labels, branch_lengths, stacked_branch_lengths = get_branch_lengths(these_timings)
-
-        path = []
-        if pre > -1:
-            path += ["A"]*pre
-        if mid > -1:
-            path += ["GD"]
-        if mid > 0:
-            path += ["A"]*mid
-        if post > -1:
-            path += ["GD"]
-        if post > 0:
-            path += ["A"]*post
-
-        print("timings")
-        print(these_timings)
-        print("labels")
-        print(labels)
-        print("lengths")
-        print(lengths_array)
-        #>>> data = pickle.load(open("pre_mat129_u65_d10.precomputed.pickle",'rb'))
-        # in the keys are all the possible paths...
-        # each of these is a matrix that you can use to calculate the possible paths
-        
-        ends = these_timings[3]
-        starts = ends - lengths_array
-
-        paths = np.zeros(ends.shape, dtype=float, order='C')
-        for row in range(lengths_array.shape[0]):
-            for col in range(lengths_array.shape[1]):
-                #print(path)
-                #print((row,col))
-                these_paths = path[starts[row][col]:ends[row][col]]
-                #print(these_paths)
-                path_code = get_path_code(these_paths)
-                #print(path_code)
-
-                if labels[col] == '1':
-                    likelihood = data[path_code][1][1]
-
-                else:
-                    likelihood = data[path_code][1][2]
-
-                paths[row][col] = likelihood
-
-        print("starts")
-        print(starts)
-        print("ends")
-        print(ends)
-        print("codes")
-        print(paths)
-
-        ll = np.log(paths)
-        print(ll)
-        BP_probs = np.sum(ll, axis=1)
-        print(BP_probs)
-        all_BP_probs += [BP_probs]
-
-    return(all_BP_probs)
-
-
-data = pkl.load(open("../precomputed/store_pre_pickle/pre_mat129_u"+str(int(100*p_up))+"_d"+str(int(100*p_down))+".precomputed.pickle",'rb'))
-print("###########\n"*10)
-BP_probs = {}
-for chrom in timings.keys():
-    print(chrom)
-    BP_probs[chrom]  = timing_struct_to_BP_likelihood(data,timings,chrom,pre=pre,mid=mid,post=post,up=p_up,down=p_down)
+    BP_likelihoods = get_BP_likelihoods(
+            timings=timings,
+            pre=pre,
+            mid=mid,
+            post=post,
+            p_up=p_up,
+            p_down=p_down
+            )
 
 
 
@@ -869,7 +882,7 @@ for chrom in timings.keys():
 outputs = []
 for plambda in range(100):
     lam = plambda/5
-    outputs += [(lam,objective_function_SNV_loglik(lam,timings,BP_probs))]
+    outputs += [(lam,objective_function_SNV_loglik(lam,timings,BP_likelihoods))]
 
 
 #iterating though linearly doesn't seem to be too bad. It isn't fast but it isn't too bad.
@@ -879,7 +892,7 @@ print(outputs)
 
 
 # now we need to modify it so that we are also printing out the best subtree for each tree
-result = find_best_SNV_likelihood(outputs[0][0],timings,BP_probs)
+result = find_best_SNV_likelihood(outputs[0][0],timings,BP_likelihoods)
 print(result)
 
 def tidy_tree_timings(tree,parents):
