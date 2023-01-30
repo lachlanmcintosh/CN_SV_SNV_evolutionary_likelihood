@@ -608,7 +608,7 @@ def get_branch_lengths(timings):
         indices = find_indices(CNs,CN)
         new_stacked_branch_lengths = branch_lengths[:,indices].sum(axis=1)
 
-        if CN == CNs[0]:
+        if CN == unique_CNs[0]:
             stacked_branch_lengths = new_stacked_branch_lengths
 
         else:
@@ -640,17 +640,17 @@ def get_path_code(code_list):
     return(output)
 
 
-def timing_struct_to_BP_likelihood_per_chrom(data, timings, pre, mid, post):
+def timing_struct_to_BP_likelihood_per_chrom(data, trees_and_timings, pre, mid, post):
 
     all_BP_likelihoods = []
 
-    for these_timings in timings:
-        print(these_timings)
-        if None in these_timings[3]:
+    for these_tts in trees_and_timings:
+        print(these_tts)
+        if None in these_tts[3]:
             BP_likelihoods = -1
 
         else:
-            CNs, unique_CNs, branch_lengths, stacked_branch_lengths = get_branch_lengths(these_timings)
+            CNs, unique_CNs, branch_lengths, stacked_branch_lengths = get_branch_lengths(these_tts)
 
             path = []
             if pre > -1:
@@ -665,7 +665,7 @@ def timing_struct_to_BP_likelihood_per_chrom(data, timings, pre, mid, post):
                 path += ["A"]*post
 
             print("timings")
-            print(these_timings)
+            print(these_tts)
             print("copy numbers")
             print(CNs)
             print("branch lengths")
@@ -674,7 +674,7 @@ def timing_struct_to_BP_likelihood_per_chrom(data, timings, pre, mid, post):
             # in the keys are all the possible paths...
             # each of these is a matrix that you can use to calculate the possible paths
         
-            ends = these_timings[3]
+            ends = these_tts[3]
             starts = ends - branch_lengths
 
             paths = np.zeros(ends.shape, dtype=float, order='C')
@@ -715,16 +715,16 @@ def timing_struct_to_BP_likelihood_per_chrom(data, timings, pre, mid, post):
     return(all_BP_likelihoods)
 
 
-def get_BP_likelihoods(timings,pre,mid,post,p_up,p_down):
+def get_BP_likelihoods(trees_and_timings,pre,mid,post,p_up,p_down):
     file = precomputed_file_folder + \
         "/precomputed/store_pre_pickle/pre_mat129_u"+str(int(p_up))+ \
         "_d"+str(int(p_down))+".precomputed.pickle"
     data = pkl.load(open(file,'rb'))
     BP_likelihoods = {}
-    for chrom in timings.keys():
+    for chrom in trees_and_timings.keys():
         BP_likelihoods[chrom]  = timing_struct_to_BP_likelihood_per_chrom(
                 data=data,
-                timings=timings[chrom],
+                trees_and_timings=trees_and_timings[chrom],
                 pre=pre,
                 mid=mid,
                 post=post
@@ -927,12 +927,15 @@ for res in range(SEARCH_DEPTH):
     print("investigate the problem")
     for chrom in trees_and_timings:
         print(chrom)
-        print(len(trees_and_timings[chrom]))
-        for i in range(len(trees_and_timings[chrom])):
-            print(trees_and_timings[chrom][i])
-            print(None in trees_and_timings[chrom][i][3])
+        if len(trees_and_timings[chrom]) < 1:
+            for i in range(len(trees_and_timings[chrom])):
+                print(trees_and_timings[chrom][i])
+                print(None in trees_and_timings[chrom][i][3])
 
-    exit()
+    if res == SEARCH_DEPTH - 1:
+        for chrom in trees_and_timings:
+            assert(len(trees_and_timings[chrom]) >= 1)
+
 
     # need to take the rpinting of information out of the functions and into this main function only
     # if information needs to be printed then it needs to be able to be printed from this function here
@@ -959,29 +962,16 @@ for res in range(SEARCH_DEPTH):
     outputs = []
     for plambda in range(100):
         lam = plambda/5
-        outputs += [(lam,objective_function_SNV_loglik(lam,timings,BP_likelihoods))]
+        outputs += [(lam,objective_function_SNV_loglik(lam,trees_and_timings,BP_likelihoods))]
 
     #iterating though linearly doesn't seem to be too bad. It isn't fast but it isn't too bad, something to fix later
     # maybe we can add in the BP likelihoods now. 
     outputs.sort(key=lambda x: x[1])
-    print("genome likelihoods vs lambda parameter: "+outputs)
+    print("genome likelihoods vs lambda parameter: "+str(outputs))
 
     # now we need to modify it so that we are also printing out the best subtree for each tree
-    result = find_best_SNV_likelihood(outputs[0][0],timings,BP_likelihoods)
+    result = find_best_SNV_likelihood(outputs[0][0],trees_and_timings,BP_likelihoods)
     print(result)
 
 
-for chrom in result[1].keys():
-    tree,labelled_tree,count,timing_array,parents = timings[chrom][0]
-    print("##### chrom: " + str(chrom))
-    print("loglik: " + str(result[1][chrom][0]))
-    these_timings = timings[chrom][result[1][chrom][1]]
-    print("tree: " + str(these_timings[0]))
-    print("tree timings est: " + str(tidy_tree_timings(these_timings[3][result[1][chrom][2]],parents)))
-    print("tree timings truth: " + str(simulated_chromosomes[chrom]))
-    print("SNV timings: " + str(these_timings[-1]))
-    # i guess we just want to get the t_chr stuff out...
-    # simulation[2] tells you when each chromosome was created... but we need to know its type
-    # simulation[0] has the ssame len as simulation[2]
-    # this is great, but now we need to record whom is the parent of whom in the simulation. can't remember how to pull it out from the snv list. that might help but better to bake it in from the start
-    # then I want to compare the trees and the timings. 
+# turn trees and timings into a distionary to hold the data, 724
