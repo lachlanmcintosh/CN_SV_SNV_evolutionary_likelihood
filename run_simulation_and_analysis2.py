@@ -494,25 +494,17 @@ def get_timings_per_tree(tree,epochs):
     for label in unique_tree_labels:
         if label == 0:
             # then it is the root node and there is no such thing as a timing for the first bifurcation
-            # it is simply a natural split do to each person inheriting one of each CN
-            timings = np.tile(timings, (1,1))
+            # it is simply a natural split due to each person inheriting one of each CN
+            timings = np.tile(timings, (1,1)) # this forces a potentially 1d array to be 2d
             timings[:,label] = 0 
 
-        elif label == 1:# or label == 2:
-            # then this is the root node of each of the maternal and paternal pairs respectively
-            timings = np.tile(timings, (epochs,1))
-            timings[:,label] = list( range(1, epochs+1))
-
-        elif label == 2:
-            # then this is the root node of each of the maternal and paternal pairs respectively
-            timings = np.tile(timings, (epochs,1))
-
-            new_values = []
-            for x in range(1, epochs+1):
-                new_values += [x]*epochs
-
-            timings[:,label] = new_values
-
+        elif label_to_copy[str(label)] == 1:
+            # then it is a leaf node and we can set it to be 
+            timings = np.tile(timings, (1,1))
+            timings[:,label] = epochs 
+            # or label_to_copy[str(label)] == 0: 
+            # I removed this second condition on forcing lost CNs to have thier BP prob calculated all the way to the end
+            # it is a benefit to find out when they were most likely lost
 
         else:
             parent = int( parents[ str( label ) ] ) 
@@ -562,10 +554,17 @@ def get_all_trees_and_timings(observed_SNV_multiplicities, observed_CNs):
             SNV_CNs = list(observed_SNV_multiplicities[chrom].keys())
                 )
 
-        epochs = pre + mid + post + (mid>=0) + (post>=0)
+        epochs = pre*(pre>0) + mid*(mid>0) + post*(post>0) + (mid>=0) + (post>=0)
 
         trees_and_timings[chrom] = [get_timings_per_tree(x,epochs) for x in all_trees]
         trees_and_timings[chrom] = [x for x in trees_and_timings[chrom] if not None in x[3]]
+
+        # this is potentially an error i haven't complettely investigated, 
+        # it might be possible to have None in one row but not all rows of the array?
+
+        if len(trees_and_timings[chrom]) == 0:
+            print(trees_and_timings[chrom])
+            print("CAREFUL\n"*10)
     
     return(trees_and_timings)
 
@@ -593,9 +592,6 @@ def get_branch_lengths(timings):
     for child in parents:
         ch = int(child)
         p = int(parents[child])
-        #print("child: "+ str(ch))
-        #print("parent: "+ str(p))
-        #print(branch_lengths)
 
         branch_lengths[:,ch] = branch_lengths[:,ch] - branch_lengths[:,p]
         # these branch_lengths are the lengths for each node to bifurcate
@@ -678,14 +674,12 @@ def timing_struct_to_BP_likelihood_per_chrom(data, trees_and_timings, pre, mid, 
             starts = ends - branch_lengths
 
             paths = np.zeros(ends.shape, dtype=float, order='C')
+            likelihoods = np.zeros(ends.shape, dtype=float, order='C')
+
             for row in range(branch_lengths.shape[0]):
                 for col in range(branch_lengths.shape[1]):
-                    #print(path)
-                    #print((row,col))
                     these_paths = path[starts[row][col]:ends[row][col]]
-                    #print(these_paths)
                     path_code = get_path_code(these_paths)
-                    #print(path_code)
 
                     if CNs[col] == '1':
                         likelihood = data[path_code][1][1]
@@ -696,18 +690,23 @@ def timing_struct_to_BP_likelihood_per_chrom(data, trees_and_timings, pre, mid, 
                     else:
                         likelihood = data[path_code][1][2]
 
-                    paths[row][col] = likelihood
+                    paths[row][col] = path_code
+                    likelihoods[row][col] = likelihood
 
             print("starts")
             print(starts)
             print("ends")
             print(ends)
-            print("codes")
+            print("paths")
             print(paths)
+            print("likelihoods")
+            print(likelihoods)
 
-            ll = np.log(paths)
+            ll = np.log(likelihoods)
+            print("loglikelihoods")
             print(ll)
             BP_likelihoods = np.sum(ll, axis=1)
+            print("summed loglikelihoods")
             print(BP_likelihoods)
 
         all_BP_likelihoods += [BP_likelihoods]
@@ -928,9 +927,7 @@ for res in range(SEARCH_DEPTH):
     for chrom in trees_and_timings:
         print(chrom)
         if len(trees_and_timings[chrom]) < 1:
-            for i in range(len(trees_and_timings[chrom])):
-                print(trees_and_timings[chrom][i])
-                print(None in trees_and_timings[chrom][i][3])
+            print(trees_and_timings[chrom])
 
     if res == SEARCH_DEPTH - 1:
         for chrom in trees_and_timings:
@@ -957,7 +954,11 @@ for res in range(SEARCH_DEPTH):
             p_down=p_down
             )
 
+    for chrom in BP_likelihoods:
+        print("chrom: "+str(chrom))
+        print("BP_L: "+str(BP_likelihoods[chrom]))
 
+    exit()
     # at some point evaluate the relative value of the likelihood contributed from the BP model to the likelihood contributed by the SNV model
     outputs = []
     for plambda in range(100):
