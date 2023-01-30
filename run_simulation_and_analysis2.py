@@ -475,7 +475,7 @@ def label_tree(tree, count, parents, label_to_copy):
     return((tree, count, parents, label_to_copy))
 
 
-def get_timings_per_tree(tree,epochs,copy_dict):
+def get_timings_per_tree(tree,epochs):
     # for a given tree assign labels to it and describe the parental relationships within the tree so that we can 
     # compute the timings of nodes in arrays
 
@@ -555,29 +555,19 @@ def get_timings_per_tree(tree,epochs,copy_dict):
 
 
 def get_all_trees_and_timings(observed_SNV_multiplicities, observed_CNs):
-    all_trees = {}
-    timings = {}
+    trees_and_timings = {}
     for chrom in observed_SNV_multiplicities:
-        print("###CHROM: "+str(chrom))
-        print("chromosomal CNs: " + str(observed_CNs[chrom]))
-        print("observed_SNV_multiplicities: "+str(observed_SNV_multiplicities[chrom]))
-        all_trees[chrom] = generate_trees( 
+        all_trees = generate_trees( 
             observed_CNs = observed_CNs[chrom],
             SNV_CNs = list(observed_SNV_multiplicities[chrom].keys())
                 )
 
-        print("trees:")
-        for tree in all_trees[chrom]:
-            print(tree)
+        epochs = pre + mid + post + (mid>=0) + (post>=0)
 
-        epochs = pre+mid+post+(mid>=0)+(post>=0)
-
-        timings[chrom] = [get_timings_per_tree(x,epochs,observed_SNV_multiplicities[chrom]) for x in all_trees[chrom]]
-
-        print("timings")
-        print(timings[chrom])
+        trees_and_timings[chrom] = [get_timings_per_tree(x,epochs) for x in all_trees]
+        trees_and_timings[chrom] = [x for x in trees_and_timings[chrom] if not None in x[3]]
     
-    return(all_trees, timings)
+    return(trees_and_timings)
 
 
 ##### STEP 6; now that all timing arrays for the nodes of each tree have been created, calculate the branch lengths
@@ -750,15 +740,19 @@ def get_BP_likelihoods(timings,pre,mid,post,p_up,p_down):
 ##### 
 
 
-def get_poisson_loglikelihood(counts,stacked_branch_lengths,plambda):
-    A = np.log(branch_lengths.astype(float) * plambda * lengths[chrom]) * counts
-    B = -np.tile( [scipy.special.gammaln(x+1) for x in counts], (branch_lengths.shape[0],1))
-    C = -branch_lengths * plambda
+def get_poisson_loglikelihood(counts,stacked_branch_lengths,plambda,chrom):
+    print(stacked_branch_lengths)
+    print(lengths[chrom])
+    print(plambda)
+    print(counts)
+    A = np.log(stacked_branch_lengths.astype(float) * plambda * lengths[chrom]) * counts
+    B = -np.tile( [scipy.special.gammaln(x+1) for x in counts], (stacked_branch_lengths.shape[0],1))
+    C = -stacked_branch_lengths * plambda
     total = np.sum(A + B + C, axis=1)
     return(total)
 
 
-def get_all_poisson_loglikelihoods_per_chr(timings,plambda,BP_likelihoods,observed_SNV_multiplicities): # these "timings" are on a per chromosome basis
+def get_all_poisson_loglikelihoods_per_chr(timings,plambda,BP_likelihoods,observed_SNV_multiplicities,chrom): # these "timings" are on a per chromosome basis
     SNV_likelihoods = []
     for i in range(len(timings)):
         CNs, unique_CNs, branch_lengths, stacked_branch_lengths = get_branch_lengths(timings[i])
@@ -774,7 +768,8 @@ def get_all_poisson_loglikelihoods_per_chr(timings,plambda,BP_likelihoods,observ
         this_SNV_likelihood = get_poisson_loglikelihood(
                 counts=counts, 
                 stacked_branch_lengths=stacked_branch_lengths, 
-                plambda=plambda
+                plambda=plambda,
+                chrom=chrom
                 ) 
 
         this_SNV_likelihood += BP_likelihoods[i]
@@ -795,7 +790,8 @@ def find_best_SNV_likelihood(plambda, timings, BP_likelihoods):
                 timings=timings[chrom], 
                 plambda=plambda, 
                 BP_likelihoods=BP_likelihoods[chrom],
-                observed_SNV_multiplicities=observed_SNV_multiplicities
+                observed_SNV_multiplicities=observed_SNV_multiplicities[chrom],
+                chrom=chrom
                 )
         best[chrom] = (-np.Inf, 0, 0) # the second entry is the tree and the third entry is the row of that timings tree
 
@@ -835,21 +831,22 @@ print("START")
 do_simulation = False 
 cache_results = False
 
+pre = 2
+mid = 2
+post = -1
+p_up=0.3
+p_down=0.3
+rate = 10
+
+real_pre = pre
+real_mid = mid
+real_post = post
+real_p_up = p_up
+real_p_down = p_down
+real_rate = rate
+
+
 if do_simulation:
-    pre = 2
-    mid = 2
-    post = -1
-    p_up=0.3
-    p_down=0.3
-    rate = 10
-
-    true_pre = pre
-    true_mid = mid
-    true_post = post
-    true_p_up = p_up
-    true_p_down = p_down
-    true_rate = rate
-
     simulated_chromosomes = simulate_single_with_poisson_timestamps_names(
             p_up=p_up, 
             p_down=p_down, 
@@ -901,7 +898,7 @@ print("SNV multiplicities")
 observed_SNV_multiplicities = count_SNV_multiplicities(simulated_chromosomes)
 print(observed_SNV_multiplicities)
 
-SEARCH_DEPTH = 4
+SEARCH_DEPTH = 1
 for res in range(SEARCH_DEPTH):
     path = marginal_likelihoods["path"].iloc[res]
     p_up = marginal_likelihoods['mean_p_up'].iloc[res].round()
@@ -922,10 +919,20 @@ for res in range(SEARCH_DEPTH):
 
     SNV_CN_likelihoods = {}
 
-    all_trees, timings = get_all_trees_and_timings(
+    trees_and_timings = get_all_trees_and_timings(
             observed_SNV_multiplicities = observed_SNV_multiplicities,
             observed_CNs = observed_CNs
             )
+
+    print("investigate the problem")
+    for chrom in trees_and_timings:
+        print(chrom)
+        print(len(trees_and_timings[chrom]))
+        for i in range(len(trees_and_timings[chrom])):
+            print(trees_and_timings[chrom][i])
+            print(None in trees_and_timings[chrom][i][3])
+
+    exit()
 
     # need to take the rpinting of information out of the functions and into this main function only
     # if information needs to be printed then it needs to be able to be printed from this function here
@@ -935,8 +942,11 @@ for res in range(SEARCH_DEPTH):
     # output = scipy.optimize.differential_evolution(func=objective_function_SNV_loglik,bounds=Bounds([0.], [20.]),args=(timings))
     # need to reintroduce some sort of non array search for both the rate parameter AND p_up AND p_down
 
+    # put branch lengths here, they are getting passed in to both comput ehte SNV likelihood and the BP likelihoods below
+    # should not create the exact same data structure twice
+
     BP_likelihoods = get_BP_likelihoods(
-            timings=timings,
+            trees_and_timings=trees_and_timings,
             pre=pre,
             mid=mid,
             post=post,
