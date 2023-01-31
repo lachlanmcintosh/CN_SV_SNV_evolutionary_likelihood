@@ -505,6 +505,7 @@ def get_timings_per_tree(tree,epochs):
             # or label_to_copy[str(label)] == 0: 
             # I removed this second condition on forcing lost CNs to have thier BP prob calculated all the way to the end
             # it is a benefit to find out when they were most likely lost
+            # it is also of potentially great computational cost so leave this comment here for further investigation in the future
 
         else:
             parent = int( parents[ str( label ) ] ) 
@@ -598,7 +599,9 @@ def get_branch_lengths(timings):
 
     # now we need to stack the branch lengths of the same copy numbers together:
     CNs = [x for x in re.split("\(|\)|,|'", str(tree)) if x.isdigit()]
-    unique_CNs = sorted(list(set(CNs)),reverse=True)
+    unique_CNs = [int(x) for x in list(set(CNs))]
+    unique_CNs = sorted(unique_CNs,reverse=True)
+    unique_CNs = [str(x) for x in list(set(CNs))]
 
     for CN in unique_CNs:
         indices = find_indices(CNs,CN)
@@ -673,7 +676,7 @@ def timing_struct_to_BP_likelihood_per_chrom(data, trees_and_timings, pre, mid, 
             ends = these_tts[3]
             starts = ends - branch_lengths
 
-            paths = np.zeros(ends.shape, dtype=float, order='C')
+            paths = np.zeros(ends.shape, dtype=object, order='C')
             likelihoods = np.zeros(ends.shape, dtype=float, order='C')
 
             for row in range(branch_lengths.shape[0]):
@@ -705,7 +708,7 @@ def timing_struct_to_BP_likelihood_per_chrom(data, trees_and_timings, pre, mid, 
             ll = np.log(likelihoods)
             print("loglikelihoods")
             print(ll)
-            BP_likelihoods = np.sum(ll, axis=1)
+            BP_likelihoods = np.sum(ll[:,1:], axis=1)
             print("summed loglikelihoods")
             print(BP_likelihoods)
 
@@ -739,15 +742,14 @@ def get_BP_likelihoods(trees_and_timings,pre,mid,post,p_up,p_down):
 ##### 
 
 
-def get_poisson_loglikelihood(counts,stacked_branch_lengths,plambda,chrom):
-    print(stacked_branch_lengths)
-    print(lengths[chrom])
-    print(plambda)
-    print(counts)
+def get_poisson_loglikelihood(counts,stacked_branch_lengths,plambda,chrom,not_CN_0):
     A = np.log(stacked_branch_lengths.astype(float) * plambda * lengths[chrom]) * counts
     B = -np.tile( [scipy.special.gammaln(x+1) for x in counts], (stacked_branch_lengths.shape[0],1))
     C = -stacked_branch_lengths * plambda
-    total = np.sum(A + B + C, axis=1)
+    summed = A + B + C
+    summed = summed*not_CN_0
+    summed = summed[:,1:]
+    total = np.sum(summed, axis=1)
     return(total)
 
 
@@ -763,15 +765,21 @@ def get_all_poisson_loglikelihoods_per_chr(timings,plambda,BP_likelihoods,observ
             else:
                 counts += [observed_SNV_multiplicities[int(CN)]]
 
+        not_CN_0 = np.tile(np.array([int(x) > 0 for x in unique_CNs]),(len(BP_likelihoods[i],1)))
+
         # put together BP and poisson likelihoods
         this_SNV_likelihood = get_poisson_loglikelihood(
                 counts=counts, 
                 stacked_branch_lengths=stacked_branch_lengths, 
                 plambda=plambda,
-                chrom=chrom
+                chrom=chrom,
+                not_CN_0=not_CN_0
                 ) 
-
+        #print(chrom)
+        #print(i)
+        #print(this_SNV_likelihood)
         this_SNV_likelihood += BP_likelihoods[i]
+        #print(this_SNV_likelihood)
 
         SNV_likelihoods += [this_SNV_likelihood]
 
@@ -790,7 +798,7 @@ def find_best_SNV_likelihood(plambda, timings, BP_likelihoods):
                 plambda=plambda, 
                 BP_likelihoods=BP_likelihoods[chrom],
                 observed_SNV_multiplicities=observed_SNV_multiplicities[chrom],
-                chrom=chrom
+                chrom=chrom # still need to pass in chrom for the lengths array
                 )
         best[chrom] = (-np.Inf, 0, 0) # the second entry is the tree and the third entry is the row of that timings tree
 
@@ -905,8 +913,8 @@ for res in range(SEARCH_DEPTH):
     pre, mid, post = path_code_to_pre_mid_post(path)
 
     if res == SEARCH_DEPTH - 1:
-        p_up = real_p_up
-        p_down = real_p_down
+        p_up = real_p_up*100
+        p_down = real_p_down*100
         pre = real_pre
         mid = real_mid
         post = real_post
@@ -958,7 +966,6 @@ for res in range(SEARCH_DEPTH):
         print("chrom: "+str(chrom))
         print("BP_L: "+str(BP_likelihoods[chrom]))
 
-    exit()
     # at some point evaluate the relative value of the likelihood contributed from the BP model to the likelihood contributed by the SNV model
     outputs = []
     for plambda in range(100):
