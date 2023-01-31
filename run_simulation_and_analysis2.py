@@ -601,7 +601,7 @@ def get_branch_lengths(timings):
     CNs = [x for x in re.split("\(|\)|,|'", str(tree)) if x.isdigit()]
     unique_CNs = [int(x) for x in list(set(CNs))]
     unique_CNs = sorted(unique_CNs,reverse=True)
-    unique_CNs = [str(x) for x in list(set(CNs))]
+    unique_CNs = [str(x) for x in unique_CNs]
 
     for CN in unique_CNs:
         indices = find_indices(CNs,CN)
@@ -747,9 +747,11 @@ def get_poisson_loglikelihood(counts,stacked_branch_lengths,plambda,chrom,not_CN
     B = -np.tile( [scipy.special.gammaln(x+1) for x in counts], (stacked_branch_lengths.shape[0],1))
     C = -stacked_branch_lengths * plambda
     summed = A + B + C
+    print("\t"+str(summed))
     summed = summed*not_CN_0
-    summed = summed[:,1:]
+    print("\t"+str(summed))
     total = np.sum(summed, axis=1)
+    print("\t"+str(total))
     return(total)
 
 
@@ -765,8 +767,16 @@ def get_all_poisson_loglikelihoods_per_chr(timings,plambda,BP_likelihoods,observ
             else:
                 counts += [observed_SNV_multiplicities[int(CN)]]
 
-        not_CN_0 = np.tile(np.array([int(x) > 0 for x in unique_CNs]),(len(BP_likelihoods[i],1)))
+        not_CN_0 = np.tile(np.array([int(x) > 0 for x in unique_CNs]),(len(BP_likelihoods[i]),1))
+        if sum([max(CNs) == x for x in CNs]) == 1:
+            not_root_CN = np.tile(np.array([int(x) != max(CNs) for x in unique_CNs]),(len(BP_likelihoods[i]),1))
 
+        not_CN_0 = not_root_CN + not_CN_0
+
+        print(CNs)
+        print(unique_CNs)
+        print(branch_lengths)
+        print(stacked_branch_lengths)
         # put together BP and poisson likelihoods
         this_SNV_likelihood = get_poisson_loglikelihood(
                 counts=counts, 
@@ -775,11 +785,11 @@ def get_all_poisson_loglikelihoods_per_chr(timings,plambda,BP_likelihoods,observ
                 chrom=chrom,
                 not_CN_0=not_CN_0
                 ) 
-        #print(chrom)
-        #print(i)
-        #print(this_SNV_likelihood)
+        print(chrom)
+        print(i)
+        print(this_SNV_likelihood)
         this_SNV_likelihood += BP_likelihoods[i]
-        #print(this_SNV_likelihood)
+        print(this_SNV_likelihood)
 
         SNV_likelihoods += [this_SNV_likelihood]
 
