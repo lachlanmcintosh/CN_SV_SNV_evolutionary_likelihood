@@ -565,7 +565,9 @@ def get_all_trees_and_timings(observed_SNV_multiplicities, observed_CNs):
 
         if len(trees_and_timings[chrom]) == 0:
             print(trees_and_timings[chrom])
-            print("CAREFUL\n"*10)
+            #print("CAREFUL\n"*10)
+
+        print(trees_and_timings[chrom])
     
     return(trees_and_timings)
 
@@ -742,16 +744,27 @@ def get_BP_likelihoods(trees_and_timings,pre,mid,post,p_up,p_down):
 ##### 
 
 
-def get_poisson_loglikelihood(counts,stacked_branch_lengths,plambda,chrom,not_CN_0):
+def get_poisson_loglikelihood(counts,stacked_branch_lengths,plambda,chrom,to_delete):
     A = np.log(stacked_branch_lengths.astype(float) * plambda * lengths[chrom]) * counts
     B = -np.tile( [scipy.special.gammaln(x+1) for x in counts], (stacked_branch_lengths.shape[0],1))
-    C = -stacked_branch_lengths * plambda
+    C = -stacked_branch_lengths * plambda * lengths[chrom]
+
     summed = A + B + C
-    print("\t"+str(summed))
-    summed = summed*not_CN_0
-    print("\t"+str(summed))
+    summed = np.delete(summed,to_delete,1)
     total = np.sum(summed, axis=1)
-    print("\t"+str(total))
+
+    not_a_probability = any([x>0 for x in total])
+    if not_a_probability:
+        print(bits)
+        print(A)
+        print(B)
+        print(C)
+        print("\t"+str(summed))
+        print("\t"+str(total))
+        print(bits)
+        print(plambda * lengths[chrom])
+        assert(not not_a_probability)
+
     return(total)
 
 
@@ -767,29 +780,40 @@ def get_all_poisson_loglikelihoods_per_chr(timings,plambda,BP_likelihoods,observ
             else:
                 counts += [observed_SNV_multiplicities[int(CN)]]
 
-        not_CN_0 = np.tile(np.array([int(x) > 0 for x in unique_CNs]),(len(BP_likelihoods[i]),1))
-        if sum([max(CNs) == x for x in CNs]) == 1:
-            not_root_CN = np.tile(np.array([int(x) != max(CNs) for x in unique_CNs]),(len(BP_likelihoods[i]),1))
 
-        not_CN_0 = not_root_CN + not_CN_0
+        if '0' not in unique_CNs:
+            to_delete = [0]
+        else:
+            to_delete = [len(unique_CNs)-1]
 
-        print(CNs)
-        print(unique_CNs)
-        print(branch_lengths)
-        print(stacked_branch_lengths)
+        if unique_CNs[0] == '1' and unique_CNs[-1] == '0':
+            to_delete = [0,len(unique_CNs)-1]
+
+        #not_CN_0 = np.tile(np.array([int(x) > 0 for x in unique_CNs]),(len(BP_likelihoods[i]),1))
+        #int_CNs = [int(x) for x in CNs]
+        #if sum([max(int_CNs) == x for x in int_CNs]) == 1:
+        #    not_root_CN = np.tile(np.array([int(x) != max(int_CNs) for x in unique_CNs]),(len(BP_likelihoods[i]),1))
+        #    print(not_CN_0)
+        #    not_CN_0 = not_root_CN * not_CN_0
+        #    print(not_CN_0)
+
+        #print(CNs)
+        #print(unique_CNs)
+        #print(branch_lengths)
+        #print(stacked_branch_lengths)
         # put together BP and poisson likelihoods
         this_SNV_likelihood = get_poisson_loglikelihood(
                 counts=counts, 
                 stacked_branch_lengths=stacked_branch_lengths, 
                 plambda=plambda,
                 chrom=chrom,
-                not_CN_0=not_CN_0
+                to_delete=to_delete
                 ) 
-        print(chrom)
-        print(i)
-        print(this_SNV_likelihood)
+        #print(chrom)
+        #print(i)
+        #print(this_SNV_likelihood)
         this_SNV_likelihood += BP_likelihoods[i]
-        print(this_SNV_likelihood)
+        #print(this_SNV_likelihood)
 
         SNV_likelihoods += [this_SNV_likelihood]
 
@@ -845,7 +869,7 @@ def path_code_to_pre_mid_post(path):
 ##### 
 
 print("START")
-do_simulation = False 
+do_simulation = True 
 cache_results = False
 
 pre = 2
@@ -915,7 +939,8 @@ print("SNV multiplicities")
 observed_SNV_multiplicities = count_SNV_multiplicities(simulated_chromosomes)
 print(observed_SNV_multiplicities)
 
-SEARCH_DEPTH = 1
+SEARCH_DEPTH = 10 
+results = []
 for res in range(SEARCH_DEPTH):
     path = marginal_likelihoods["path"].iloc[res]
     p_up = marginal_likelihoods['mean_p_up'].iloc[res].round()
@@ -933,8 +958,6 @@ for res in range(SEARCH_DEPTH):
     print("pre: "+ str(pre))
     print("mid: "+str(mid))
     print("post: "+str(post))
-
-    SNV_CN_likelihoods = {}
 
     trees_and_timings = get_all_trees_and_timings(
             observed_SNV_multiplicities = observed_SNV_multiplicities,
@@ -990,6 +1013,9 @@ for res in range(SEARCH_DEPTH):
     # now we need to modify it so that we are also printing out the best subtree for each tree
     result = find_best_SNV_likelihood(outputs[0][0],trees_and_timings,BP_likelihoods)
     print(result)
+    results += [[result[0],pre,mid,post,p_up,p_down,result]]
 
+for res in sorted(results):
+    print(res)
 
 # turn trees and timings into a distionary to hold the data, 724
