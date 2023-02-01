@@ -869,7 +869,8 @@ def path_code_to_pre_mid_post(path):
 ##### 
 
 print("START")
-do_simulation = True 
+do_simulation = False #
+#do_simulation = True 
 cache_results = False
 
 pre = 2
@@ -877,7 +878,7 @@ mid = 2
 post = -1
 p_up=0.13
 p_down=0.13
-rate = 70
+rate = 700
 
 real_pre = pre
 real_mid = mid
@@ -939,7 +940,7 @@ print("SNV multiplicities")
 observed_SNV_multiplicities = count_SNV_multiplicities(simulated_chromosomes)
 print(observed_SNV_multiplicities)
 
-SEARCH_DEPTH = 10 
+SEARCH_DEPTH = 1 
 results = []
 for res in range(SEARCH_DEPTH):
     path = marginal_likelihoods["path"].iloc[res]
@@ -1002,7 +1003,7 @@ for res in range(SEARCH_DEPTH):
     # at some point evaluate the relative value of the likelihood contributed from the BP model to the likelihood contributed by the SNV model
     outputs = []
     for plambda in range(100):
-        lam = plambda
+        lam = plambda*10
         outputs += [(lam,objective_function_SNV_loglik(lam,trees_and_timings,BP_likelihoods))]
 
     #iterating though linearly doesn't seem to be too bad. It isn't fast but it isn't too bad, something to fix later
@@ -1018,4 +1019,38 @@ for res in range(SEARCH_DEPTH):
 for res in sorted(results):
     print(res)
 
-# turn trees and timings into a distionary to hold the data, 724
+# turn trees and timings into a distionary to hold the data, 
+
+def get_complementary_node(node):
+
+
+# now make a structure to compare the truth tree to the found tree
+def insert_node_into_truth_tree(tree,node):
+    assert( node["unique_identifier"] != tree["unique_identifier"])
+
+    if node["parent"] == tree["unique_identifier"]:
+        tree["children"] = [node, get_complementary_node(node)]
+
+    else:
+        for child in tree["children"]:
+            potential_tree = insert_node_into_truth_tree(child,node)
+            if not potential_tree is None:
+                new_child = potential_tree
+                old_child = child
+
+        tree["children"].pop(old_child)
+        tree["children"].append(new_child)
+
+    return(tree)
+
+def create_truth_tree(simulated_chromosomes):
+    trees = {}
+    for chrom_type in simulated_chromosomes:
+        # first sort the nodes by the order they need to be inserted in:
+        sorted_list = sorted([(x["unique_identifier"],x) for x in simulated_chromosomes[chrom_type]])
+        tree = {"unique_identifier"=-1,'parent'=None,epoch_created=None,paternal=None,children=[]} 
+        for new_node in sorted_list:
+            trees[chrom_type] = insert_node_into_truth_tree(tree,node)
+
+
+        
