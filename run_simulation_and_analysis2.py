@@ -875,9 +875,9 @@ cache_results = False
 pre = 2
 mid = 2
 post = -1
-p_up=0.3
-p_down=0.3
-rate = 10
+p_up=0.13
+p_down=0.13
+rate = 70
 
 real_pre = pre
 real_mid = mid
@@ -1002,7 +1002,7 @@ for res in range(SEARCH_DEPTH):
     # at some point evaluate the relative value of the likelihood contributed from the BP model to the likelihood contributed by the SNV model
     outputs = []
     for plambda in range(100):
-        lam = plambda/5
+        lam = plambda
         outputs += [(lam,objective_function_SNV_loglik(lam,trees_and_timings,BP_likelihoods))]
 
     #iterating though linearly doesn't seem to be too bad. It isn't fast but it isn't too bad, something to fix later
