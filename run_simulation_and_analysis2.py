@@ -182,6 +182,52 @@ def simulate_single_with_poisson_timestamps_names(p_up,p_down,pre,mid,post,rate)
 
     return(simulated_chromosomes)
 
+##### STEP 1b; from the simulated genome create a tree
+#####
+#####
+#####
+#####
+#####
+
+
+def insert_node_into_complement(tree,node):
+    if tree["child"] == None:
+        tree["child"] = node
+    else:
+        tree["complement"] = insert_node_into_complement(tree["complement"],node)
+
+    return(tree)
+
+# now make a structure to compare the truth tree to the found tree
+def insert_node_into_truth_tree(tree,node):
+    assert(node["unique_identifier"] != tree["unique_identifier"])
+
+    if node["parent"] == tree["unique_identifier"]:
+        if tree["child"] == None:
+            tree["child"] = node
+
+        else:
+            tree["complement"] = insert_node_into_complement(tree["complement"],node)
+
+    else:
+        tree["child"] = insert_node_into_truth_tree(tree["child"],node)
+        tree["complement"] = insert_node_into_truth_tree(tree["complement"],node)
+
+    return(tree)
+
+def create_truth_trees(simulated_chromosomes):
+    #there is a tree fro every chromosome
+    trees = {}
+    for chrom_type in simulated_chromosomes:
+        # first sort the nodes by the order they need to be inserted in:
+        sorted_list = sorted([(x["unique_identifier"],x) for x in simulated_chromosomes[chrom_type]])
+        tree = {"unique_identifier"=-1,'parent'=None,epoch_created=None,paternal=None,child=None,complement=None} 
+        for new_node in sorted_list:
+            trees[chrom_type] = insert_node_into_truth_tree(tree,node)
+
+    return(trees)
+
+
 ##### STEP 2; calculate the log likelihoods over the precomputed domain for total parental specific copy number
 #####
 #####
@@ -861,7 +907,8 @@ def path_code_to_pre_mid_post(path):
     pre, mid, post = bits[0:3]
     return((pre,mid,post))
 
-##### STEP 9; run the simulation and try to find the parameters that created the simulation by optimising the likelihood of the simulated genome
+##### STEP 9; run the simulation 
+#and try to find the parameters that created the simulation by optimising the likelihood of the simulated genome
 ##### 
 ##### 
 ##### 
@@ -896,6 +943,11 @@ if do_simulation:
             mid=mid, 
             post=post, 
             rate=rate)
+
+    truth_trees = create_truth_trees(simulated_chromosomes)
+    print(truth_trees)
+
+    exit()
 
     print("observed chromosomal copynumbers")
     observed_CNs = count_CNs(simulated_chromosomes=simulated_chromosomes)
@@ -1020,37 +1072,6 @@ for res in sorted(results):
     print(res)
 
 # turn trees and timings into a distionary to hold the data, 
-
-def get_complementary_node(node):
-
-
-# now make a structure to compare the truth tree to the found tree
-def insert_node_into_truth_tree(tree,node):
-    assert( node["unique_identifier"] != tree["unique_identifier"])
-
-    if node["parent"] == tree["unique_identifier"]:
-        tree["children"] = [node, get_complementary_node(node)]
-
-    else:
-        for child in tree["children"]:
-            potential_tree = insert_node_into_truth_tree(child,node)
-            if not potential_tree is None:
-                new_child = potential_tree
-                old_child = child
-
-        tree["children"].pop(old_child)
-        tree["children"].append(new_child)
-
-    return(tree)
-
-def create_truth_tree(simulated_chromosomes):
-    trees = {}
-    for chrom_type in simulated_chromosomes:
-        # first sort the nodes by the order they need to be inserted in:
-        sorted_list = sorted([(x["unique_identifier"],x) for x in simulated_chromosomes[chrom_type]])
-        tree = {"unique_identifier"=-1,'parent'=None,epoch_created=None,paternal=None,children=[]} 
-        for new_node in sorted_list:
-            trees[chrom_type] = insert_node_into_truth_tree(tree,node)
 
 
         
