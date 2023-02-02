@@ -190,30 +190,55 @@ def simulate_single_with_poisson_timestamps_names(p_up,p_down,pre,mid,post,rate)
 #####
 
 
-def insert_node_into_complement(tree,node):
-    if tree["child"] == None:
-        tree["child"] = node
-    else:
-        tree["complement"] = insert_node_into_complement(tree["complement"],node)
-
-    return(tree)
+#def insert_node_into_complement(tree,node):
+#    assert(tree != None)
+#    if tree["child"] == None:
+#        tree["child"] = copy.deepcopy(node)
+#        tree["child"]["child"] = None
+#        tree["child"]["complement"] = None
+#    else:
+#        tree["complement"] = insert_node_into_complement(tree["complement"],node)
+#
+#    return(tree)
 
 # now make a structure to compare the truth tree to the found tree
 def insert_node_into_truth_tree(tree,node):
+    print("node")
+    print(node)
+    print("tree")
+    print(tree)
     assert(node["unique_identifier"] != tree["unique_identifier"])
 
     if node["parent"] == tree["unique_identifier"]:
         if tree["child"] == None:
-            tree["child"] = node
+            tree["complement"] = copy.deepcopy(tree)
+            tree["complement"]["epoch_created"] = node["epoch_created"]
+            # because tree is already a copoy of itself if should already have child and complement set to None
+
+            tree["child"] = copy.deepcopy(node)
+            tree["child"]["child"] = None
+            tree["child"]["complement"] = None
 
         else:
-            tree["complement"] = insert_node_into_complement(tree["complement"],node)
+            tree["complement"] = insert_node_into_truth_tree(tree["complement"],node)
 
     else:
-        tree["child"] = insert_node_into_truth_tree(tree["child"],node)
-        tree["complement"] = insert_node_into_truth_tree(tree["complement"],node)
+        # insert it below child or complement (but not at that level)
+        if tree["child"] != None:
+            tree["child"] = insert_node_into_truth_tree(tree["child"],node)
+
+        if tree["complement"] != None:
+            tree["complement"] = insert_node_into_truth_tree(tree["complement"],node)
 
     return(tree)
+
+
+# now that the truth tree is created for each chromosomes, i
+#   remove the SNV lists themselves, 
+#   count the copynumber of each node and how many unique SNVs there are at that copy number.
+
+def 
+
 
 def create_truth_trees(simulated_chromosomes):
     #there is a tree fro every chromosome
@@ -221,11 +246,12 @@ def create_truth_trees(simulated_chromosomes):
     for chrom_type in simulated_chromosomes:
         # first sort the nodes by the order they need to be inserted in:
         sorted_list = sorted([(x["unique_identifier"],x) for x in simulated_chromosomes[chrom_type]])
-        tree = {"unique_identifier"=-1,'parent'=None,epoch_created=None,paternal=None,child=None,complement=None} 
+        tree = {"unique_identifier":-1,'parent':None,'epoch_created':None,'paternal':None,'child':None,'complement':None} 
         for new_node in sorted_list:
-            trees[chrom_type] = insert_node_into_truth_tree(tree,node)
+            trees[chrom_type] = insert_node_into_truth_tree(tree,new_node[1])
 
     return(trees)
+
 
 
 ##### STEP 2; calculate the log likelihoods over the precomputed domain for total parental specific copy number
@@ -917,7 +943,7 @@ def path_code_to_pre_mid_post(path):
 
 print("START")
 do_simulation = False #
-#do_simulation = True 
+do_simulation = True 
 cache_results = False
 
 pre = 2
@@ -925,7 +951,7 @@ mid = 2
 post = -1
 p_up=0.13
 p_down=0.13
-rate = 700
+rate = 5
 
 real_pre = pre
 real_mid = mid
@@ -986,7 +1012,14 @@ if not do_simulation:
     d.close()
 
 
-# STEP 4; 
+##### STEP 10; 
+##### for each top result generate the potential trees and timing possibilities that explain that result. Use these trees and timings to come up with a better estimate of the likelihood
+##### 
+##### 
+##### 
+##### 
+
+
 
 print("SNV multiplicities")
 observed_SNV_multiplicities = count_SNV_multiplicities(simulated_chromosomes)
