@@ -189,18 +189,6 @@ def simulate_single_with_poisson_timestamps_names(p_up,p_down,pre,mid,post,rate)
 #####
 #####
 
-
-#def insert_node_into_complement(tree,node):
-#    assert(tree != None)
-#    if tree["child"] == None:
-#        tree["child"] = copy.deepcopy(node)
-#        tree["child"]["child"] = None
-#        tree["child"]["complement"] = None
-#    else:
-#        tree["complement"] = insert_node_into_complement(tree["complement"],node)
-#
-#    return(tree)
-
 # now make a structure to compare the truth tree to the found tree
 def insert_node_into_truth_tree(tree,node):
     print("node")
@@ -233,12 +221,63 @@ def insert_node_into_truth_tree(tree,node):
     return(tree)
 
 
-# now that the truth tree is created for each chromosomes, i
+# now that the truth tree is created for each chromosomes,
 #   remove the SNV lists themselves, 
 #   count the copynumber of each node and how many unique SNVs there are at that copy number.
 
-def 
+# create a recursive function to insert the correct copy number at each node in the tree
+def add_copynumber_to_tree(tree):
+    if tree["child"] == None:
+        assert(tree["complement"] == None)
+        tree["copy_number"] = 1
 
+    else:
+        tree["child"] = add_copynumber_to_tree(tree["child"])
+        tree["complement"] = add_copynumber_to_tree(tree["complement"])
+        tree["copy_number"] = tree["child"]["copy_number"] + tree["complement"]["copy_number"]
+
+    return(tree)
+
+# create a recursive function to find the correct number of SNVs at a particular copy at each node in the tree:
+def add_SNV_multiplicity_to_tree(tree):
+    if tree["child"] == None:
+        assert(tree["complement"] == None)
+
+        count = 0
+        for SNV in tree["SNVs"]:
+            if SNV["epoch_created"] >= tree["epoch_created"]:
+                count += 1
+
+        tree["SNV_multiplicity"] = count
+
+    else:
+        assert(tree["child"]["epoch_created"] == tree["complement"]["epoch_created"])
+
+        # first fill out each branch of the tree:
+        tree["child"] = add_SNV_multiplicity_to_tree(tree["child"])
+        tree["complement"] = add_SNV_multiplicity_to_tree(tree["complement"])
+        
+        # now fill out this node:
+        # (we can use the "epoch_created" tag on each SNV to calculate this)
+        count = 0
+        for SNV in tree["SNVs"]:
+            if SNV["epoch_created"] >= tree["epoch_created"] and SNV["epoch_created"] < tree["child"]["epoch_created"]:
+                count += 1
+
+        tree["SNV_multiplicity"] = count 
+
+    return(tree)
+
+
+def remove_SNVs_from_tree(tree):
+    tree.pop("SNVs")
+
+    if tree["child"] != None:
+        assert(tree["complement"] != None)
+        tree["child"] = remove_SNVs_from_tree(tree["child"])
+        tree["complement"] = remove_SNVs_from_tree(tree["complement"])
+
+    return(tree)
 
 def create_truth_trees(simulated_chromosomes):
     #there is a tree fro every chromosome
@@ -246,9 +285,16 @@ def create_truth_trees(simulated_chromosomes):
     for chrom_type in simulated_chromosomes:
         # first sort the nodes by the order they need to be inserted in:
         sorted_list = sorted([(x["unique_identifier"],x) for x in simulated_chromosomes[chrom_type]])
+
+        # create the root node of the tree for this chrom_type
         tree = {"unique_identifier":-1,'parent':None,'epoch_created':None,'paternal':None,'child':None,'complement':None} 
+
+        # insert all nodes and add metadat to tree and simplify:
         for new_node in sorted_list:
             trees[chrom_type] = insert_node_into_truth_tree(tree,new_node[1])
+            trees[chrom_type] = add_copynumber_to_tree(trees[chrom_type])
+            trees[chrom_type] = add_SNV_multiplicity_to_tree(trees[chrom_type])
+            trees[chrom_type] = remove_SNVs_from_tree(trees[chrom_type])
 
     return(trees)
 
