@@ -1048,9 +1048,12 @@ def path_code_to_pre_mid_post(path):
 def is_the_same_CN_tree(tree1,tree2):
     if len(tree1) != len(tree2):
         return False
+
     if len(tree1) == 1:
         return tree1[0] == tree2[0]
-    return compare_trees(tree1[1], tree2[1]) and compare_trees(tree1[2], tree2[2])
+
+    return compare_trees(tree1[1], tree2[1]) and 
+            compare_trees(tree1[2], tree2[2])
 
 
 # a function that counts the number of matching nodes in the tree:
@@ -1074,6 +1077,7 @@ def count_matching_CN_nodes(tree1,tree2):
 def count_nodes(tree):
     if len(tree) == 1:
         return 1
+
     return 1 + count_nodes(tree[1]) + count_nodes(tree[2])
 
 # This function takes two trees as input, each represented as a dictionary, and returns a Boolean indicating whether they are topologically identical and have the same epoch_created value and copy_number value at each node. 
@@ -1083,25 +1087,33 @@ def count_nodes(tree):
 # If both trees have child or complement keys, the function recursively calls itself on the child or complement of the two trees. 
 # If all checks return True, the function returns True, indicating that the two trees are topologically identical and have the same epoch_created value and copy_number value at each node.
 def is_the_same_tree_by_epoch_and_time_created(tree1,tree2):
-    if tree1['unique_identifier'] != tree2['unique_identifier']:
-        return False
+    #if tree1['unique_identifier'] != tree2['unique_identifier']:
+    #    return False
+
     if tree1['epoch_created'] != tree2['epoch_created']:
         return False
+
     if tree1['copy_number'] != tree2['copy_number']:
         return False
+
     if tree1.get('child') is None and 
         tree2.get('child') is None and 
         tree1.get('complement') is None and 
         tree2.get('complement') is None:
         return True
+
     if (tree1.get('child') is None) != (tree2.get('child') is None):
         return False
+
     if (tree1.get('complement') is None) != (tree2.get('complement') is None):
         return False
+
     if tree1.get('child') is not None and not compare_trees(tree1['child'], tree2['child']):
         return False
+
     if tree1.get('complement') is not None and not compare_trees(tree1['complement'], tree2['complement']):
         return False
+
     return True
 
 
@@ -1110,23 +1122,31 @@ def is_the_same_tree_by_epoch_and_time_created(tree1,tree2):
 # The rest of the function remains the same as in the compare_trees function.
 def compare_and_sum_trees(tree1, tree2):
     sum = 0
-    if tree1['unique_identifier'] != tree2['unique_identifier']:
-        return 0
+
+    #if tree1['unique_identifier'] != tree2['unique_identifier']:
+    #    return 0
+
     if tree1['copy_number'] == tree2['copy_number']:
         sum += abs(tree1['epoch_created'] - tree2['epoch_created'])
+
     if tree1.get('child') is None and 
             tree2.get('child') is None and 
             tree1.get('complement') is None and 
             tree2.get('complement') is None:
         return sum
+
     if (tree1.get('child') is None) != (tree2.get('child') is None):
         return 0
+
     if (tree1.get('complement') is None) != (tree2.get('complement') is None):
         return 0
+
     if tree1.get('child') is not None:
         sum += compare_and_sum_trees(tree1['child'], tree2['child'])
+
     if tree1.get('complement') is not None:
         sum += compare_and_sum_trees(tree1['complement'], tree2['complement'])
+
     return sum
 
 
