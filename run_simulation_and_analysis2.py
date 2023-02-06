@@ -192,9 +192,9 @@ def simulate_single_with_poisson_timestamps_names(p_up,p_down,pre,mid,post,rate)
 # now make a structure to compare the truth tree to the found tree
 def insert_node_into_truth_tree(tree,node):
     print("node")
-    print(node)
+    print("\t"+str(node))
     print("tree")
-    print(tree)
+    print("\t"+str(tree))
     assert(node["unique_identifier"] != tree["unique_identifier"])
 
     if node["parent"] == tree["unique_identifier"]:
@@ -287,17 +287,38 @@ def create_truth_trees(simulated_chromosomes):
         sorted_list = sorted([(x["unique_identifier"],x) for x in simulated_chromosomes[chrom_type]])
 
         # create the root node of the tree for this chrom_type
-        tree = {"unique_identifier":-1,'parent':None,'epoch_created':None,'paternal':None,'child':None,'complement':None} 
+        tree = {'unique_identifier':-1,
+                'parent':None,
+                'epoch_created':None,
+                'paternal':None,
+                'child':None,
+                'complement':None,
+                'SNVs':[]
+                } 
 
         # insert all nodes and add metadat to tree and simplify:
         for new_node in sorted_list:
             trees[chrom_type] = insert_node_into_truth_tree(tree,new_node[1])
-            trees[chrom_type] = add_copynumber_to_tree(trees[chrom_type])
-            trees[chrom_type] = add_SNV_multiplicity_to_tree(trees[chrom_type])
-            trees[chrom_type] = remove_SNVs_from_tree(trees[chrom_type])
+           
+        #print(trees[chrom_type])
+        trees[chrom_type] = add_copynumber_to_tree(trees[chrom_type])
+        #print(trees[chrom_type])
+        trees[chrom_type] = add_SNV_multiplicity_to_tree(trees[chrom_type])
+        #print(trees[chrom_type])
+        trees[chrom_type] = remove_SNVs_from_tree(trees[chrom_type])
+        #print(trees[chrom_type])
 
     return(trees)
 
+
+def CN_tree_from_truth_tree(truth_tree):
+
+
+def CN_trees_from_truth_trees(truth_trees):
+    for chrom_type in truth_trees:
+        truth_trees[chrom_type] = CN_tree_from_truth_tree(truth_trees[chrom_type])
+
+    return(truth_trees)
 
 
 ##### STEP 2; calculate the log likelihoods over the precomputed domain for total parental specific copy number
@@ -1017,7 +1038,8 @@ if do_simulation:
             rate=rate)
 
     truth_trees = create_truth_trees(simulated_chromosomes)
-    print(truth_trees)
+    for chrom_type in truth_trees:
+        print(truth_trees[chrom_type])
 
     exit()
 
