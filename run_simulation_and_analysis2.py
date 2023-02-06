@@ -1030,7 +1030,108 @@ def path_code_to_pre_mid_post(path):
     pre, mid, post = bits[0:3]
     return((pre,mid,post))
 
-##### STEP 9; run the simulation 
+
+##### STEP 9; write code to compare trees
+##### 
+##### 
+##### 
+##### 
+##### 
+
+# the following functions are mostly written with chatgpt3:
+
+# a small function to see if two trees are identical:
+# This function takes two trees as input, represented as lists, and returns a Boolean indicating whether they are topologically similar.
+# The function first checks if the two trees have different lengths, in which case it returns False. 
+# If the length is equal to 1, the function returns whether the single node value is equal. 
+# If the length is greater than 1, the function recursively compares the two children trees.
+def is_the_same_CN_tree(tree1,tree2):
+    if len(tree1) != len(tree2):
+        return False
+    if len(tree1) == 1:
+        return tree1[0] == tree2[0]
+    return compare_trees(tree1[1], tree2[1]) and compare_trees(tree1[2], tree2[2])
+
+
+# a function that counts the number of matching nodes in the tree:
+# The function now returns an integer instead of a Boolean, which represents the number of nodes in the two trees that are identical. 
+# If the two trees have different lengths, the function returns 0. 
+# If the length is equal to 1, the function returns 1 if the single node value is equal, or 0 otherwise. 
+# If the length is greater than 1, the function recursively compares the two children trees and adds 1 if the current node value is equal.
+def count_matching_CN_nodes(tree1,tree2):
+    if len(tree1) != len(tree2):
+        return 0
+    if len(tree1) == 1:
+        return 1 if tree1[0] == tree2[0] else 0
+    return (compare_trees(tree1[1], tree2[1]) + compare_trees(tree1[2], tree2[2]) +
+            (1 if tree1[0] == tree2[0] else 0))
+
+
+# a function to count the number of nodes in just one tree:
+# This function takes a single tree as input and returns the number of nodes in the tree. 
+# If the length of the tree is equal to 1, the function returns 1, indicating that there's only one node in the tree. 
+# If the length is greater than 1, the function recursively counts the number of nodes in the two children trees and adds 1 to represent the current node.
+def count_nodes(tree):
+    if len(tree) == 1:
+        return 1
+    return 1 + count_nodes(tree[1]) + count_nodes(tree[2])
+
+# This function takes two trees as input, each represented as a dictionary, and returns a Boolean indicating whether they are topologically identical and have the same epoch_created value and copy_number value at each node. 
+# The function first checks if the unique_identifier, epoch_created, and copy_number values are equal between the two trees. 
+# If both trees have both child and complement keys missing, the function returns True. 
+# If only one tree has a child or complement key missing, the function returns False. 
+# If both trees have child or complement keys, the function recursively calls itself on the child or complement of the two trees. 
+# If all checks return True, the function returns True, indicating that the two trees are topologically identical and have the same epoch_created value and copy_number value at each node.
+def is_the_same_tree_by_epoch_and_time_created(tree1,tree2):
+    if tree1['unique_identifier'] != tree2['unique_identifier']:
+        return False
+    if tree1['epoch_created'] != tree2['epoch_created']:
+        return False
+    if tree1['copy_number'] != tree2['copy_number']:
+        return False
+    if tree1.get('child') is None and 
+        tree2.get('child') is None and 
+        tree1.get('complement') is None and 
+        tree2.get('complement') is None:
+        return True
+    if (tree1.get('child') is None) != (tree2.get('child') is None):
+        return False
+    if (tree1.get('complement') is None) != (tree2.get('complement') is None):
+        return False
+    if tree1.get('child') is not None and not compare_trees(tree1['child'], tree2['child']):
+        return False
+    if tree1.get('complement') is not None and not compare_trees(tree1['complement'], tree2['complement']):
+        return False
+    return True
+
+
+# Here's a modified version of the function that sums the absolute differences between the epoch_created values of each node for the nodes that have identical copy_number value:
+# This function works similarly to the previous compare_trees function, but now adds the absolute difference between the epoch_created values of each node to sum if the copy_number values are equal. 
+# The rest of the function remains the same as in the compare_trees function.
+def compare_and_sum_trees(tree1, tree2):
+    sum = 0
+    if tree1['unique_identifier'] != tree2['unique_identifier']:
+        return 0
+    if tree1['copy_number'] == tree2['copy_number']:
+        sum += abs(tree1['epoch_created'] - tree2['epoch_created'])
+    if tree1.get('child') is None and 
+            tree2.get('child') is None and 
+            tree1.get('complement') is None and 
+            tree2.get('complement') is None:
+        return sum
+    if (tree1.get('child') is None) != (tree2.get('child') is None):
+        return 0
+    if (tree1.get('complement') is None) != (tree2.get('complement') is None):
+        return 0
+    if tree1.get('child') is not None:
+        sum += compare_and_sum_trees(tree1['child'], tree2['child'])
+    if tree1.get('complement') is not None:
+        sum += compare_and_sum_trees(tree1['complement'], tree2['complement'])
+    return sum
+
+
+
+##### STEP 10; run the simulation 
 #and try to find the parameters that created the simulation by optimising the likelihood of the simulated genome
 ##### 
 ##### 
