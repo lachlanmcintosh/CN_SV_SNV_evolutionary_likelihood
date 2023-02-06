@@ -1150,6 +1150,43 @@ def compare_and_sum_trees(tree1, tree2):
     return sum
 
 
+# write a function that takes a CN tree and a timings estimate and puts them together in the same structure as the truth data for comparison
+# Here's a function that takes a tree data structure in the form [value, [child1, child2]] and converts it into a dictionary-like data structure in the form {'copy_number': value, 'child': child1, 'complement': child2}:
+def convert_to_dict_tree(tree):
+    copy_number, children = tree
+    child1, child2 = children
+    child1 = convert_to_dict_tree(child1) if isinstance(child1, list) else child1
+    child2 = convert_to_dict_tree(child2) if isinstance(child2, list) else child2
+
+    return {'copy_number': copy_number, 'child': child1, 'complement': child2}
+# The function first unpacks the value and [child1, child2] components of the input tree and assigns them to the variables copy_number and children. It then further unpacks children into child1 and child2. If either child1 or child2 are lists, the function recursively calls convert_to_dict_tree
+
+
+# now write a function with two arguments, the first is a dictionary-like tree data structure in the form {'copy_number': value, 'child': child1, 'complement': child2} called tree and the second is a list of numbers which is as long as the number of nodes in the tree. Add these numbers to the tree like data structure under the key "epoch_created" in a depth first way
+# Here's a function that takes a dictionary-like tree data structure tree and a list of numbers and adds the numbers to the tree data structure under the key 'epoch_created' in a depth-first manner:
+def add_epoch_created(tree, numbers):
+    tree['epoch_created'] = numbers.pop(0)
+
+    if 'child' in tree:
+        add_epoch_created(tree['child'], numbers)
+
+    if 'complement' in tree:
+        add_epoch_created(tree['complement'], numbers)
+
+    return tree
+
+# The function first adds the first element of numbers to the tree dictionary under the key 'epoch_created' and removes it from numbers.
+# If the 'child' key is present in the tree dictionary, the function recursively calls add_epoch_created on the value of the 'child' key with the updated numbers list. 
+# If the 'complement' key is present, the function performs a similar operation. The final tree with the 'epoch_created' values is returned.
+
+# now we write a function that can fully convert to the discovered tree and turn it into the form of the generated tree
+def CN_tree_list_and_epoch_array_to_dictionary_tree(CN_tree,epoch_list):
+    dict_tree = convert_to_dict_tree(CN_tree)
+    dict_tree = add_epoch_created(dict_tree, epoch_list)
+
+    return(dict_tree)
+
+
 
 ##### STEP 10; run the simulation 
 #and try to find the parameters that created the simulation by optimising the likelihood of the simulated genome
