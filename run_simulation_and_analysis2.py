@@ -313,11 +313,41 @@ def create_truth_trees(simulated_chromosomes):
 
 def CN_tree_from_truth_tree(truth_tree):
 
+    if truth_tree["child"] != None and truth_tree["complement"] != None:
+        child_tree = CN_tree_from_truth_tree(truth_tree["child"])
+        complement_tree = CN_tree_from_truth_tree(truth_tree["complement"])
+        CN_tree = [truth_tree["copy_number"], child_tree,complement_tree] 
+
+    elif truth_tree["child"] != None:
+        child_tree = CN_tree_from_truth_tree(truth_tree["child"])
+        CN_tree = [truth_tree["copy_number"], child_tree] 
+
+    elif truth_tree["complement"] != None:
+        complement_tree = CN_tree_from_truth_tree(truth_tree["complement"])
+        CN_tree = [truth_tree["copy_number"], complement_tree] 
+
+    else:
+        CN_tree = [truth_tree["copy_number"]]
+
+    return(CN_tree)
+
+
+def make_left_heavy(tree):
+    assert(len(tree) == 1 or len(tree) == 3)
+
+    if len(tree) == 1:
+        return(tree)
+    else:
+        if tree[1][0] < tree[2][0]:
+            return([tree[0],make_left_heavy(tree[2]),make_left_heavy(tree[1])])
+        else:
+            return([tree[0],make_left_heavy(tree[1]),make_left_heavy(tree[2])])
+
 
 def CN_trees_from_truth_trees(truth_trees):
     for chrom_type in truth_trees:
         truth_trees[chrom_type] = CN_tree_from_truth_tree(truth_trees[chrom_type])
-
+        truth_trees[chrom_type] = make_left_heavy(truth_trees[chrom_type])
     return(truth_trees)
 
 
@@ -1040,6 +1070,16 @@ if do_simulation:
     truth_trees = create_truth_trees(simulated_chromosomes)
     for chrom_type in truth_trees:
         print(truth_trees[chrom_type])
+
+    CN_trees = CN_trees_from_truth_trees(truth_trees)
+    for chrom_type in CN_trees:
+        print(CN_trees[chrom_type])
+
+    # now we have to find a way to do the comparison of the trees
+    # we want to see two things, 
+    #   1) what percentage of the strucutre of the tree is correct, is it correct topologically?
+    #   2) how correct are the timing estimates within the tree?
+    #   3) what percentage of the relative timing estimates are correct?
 
     exit()
 
