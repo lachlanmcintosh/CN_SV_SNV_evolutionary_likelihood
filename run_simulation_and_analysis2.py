@@ -1333,7 +1333,4 @@ for res in range(SEARCH_DEPTH):
 for res in sorted(results):
     print(res)
 
-# turn trees and timings into a distionary to hold the data, 
-
-
         
