@@ -59,7 +59,7 @@ def count_paternity(chromosomes,paternal):
     return( len([x for x in chromosomes if paternal == x["paternal"]]) )
 
 
-def simulate_single_with_poisson_timestamps_names(p_up,p_down,pre,mid,post,rate):
+def simulate_single_with_poisson_timestamps_names(p_up,p_down,pre,mid,post,rate,agnostic=False):
     # this function simulates the evolution of a cancer genome with whole chromosome copy number changes and SNV's
     # pre, mid and post model the number of epochs / cell cycles that this genome undergoes. 
     # pre is the number of epochs that occur before the first round of genome doubling, if there is one
@@ -132,43 +132,61 @@ def simulate_single_with_poisson_timestamps_names(p_up,p_down,pre,mid,post,rate)
         else:
             # this is a standard round of aneuploidy
             for chrom_type in simulated_chromosomes:
-                # until a viable next epoch in evolution is simulated keep re simulating the next epoch
-                # buy viable we mean that we need to have at least one copy of every chromosome
-                while(True):
-                    new_chromosomes = []
+                if agnostic:
+                    # generate simulated chromosomes without consistent probabilities
+                    # randomly select a number of chromosomes to lose
+                    # randomly select a number of chromosomes to gain after that 
+                    # Delete a random number of items from the list
+                    lst = simulated_chromosomes[chrom_type]
+                    for i in range(random.randint(0, len(lst))):
+                        lst.pop(random.randint(0, len(lst) - 1))
+        
+                     # Add copies of a random number of items from the list back to itself
+                    for i in range(random.randint(0, len(lst))):
+                        item = lst[random.randint(0, len(lst) - 1)]
+                        lst.append(copy.deepcopy(item))
 
-                    for chrom in simulated_chromosomes[chrom_type]:
-                        # randomly draw from 
-                        #    losing this chromosome with probability p_down, 
-                        #    gaining another copy of this chromosome with probability p_up,
-                        #    nothing happening with probability 1 - p_up - down:
-                        change = np.random.choice([1,0,-1], 1, p=[p_up,1-p_up-p_down,p_down])
+                    simulated_chromosomes[chrom_type] = lst
 
-                        if change == 0:
-                            # keep the old chromosome only
-                            new_chromosomes += [chrom]
 
-                        elif change == 1:
-                            # create a new chromosome
-                            new_chromosome = copy.deepcopy(chrom)
-                            chrom_count += 1
-                            new_chromosome["unique_identifier"] = chrom_count
-                            new_chromosome["epoch_created"] = epoch
-                            new_chromosome["parent"] = chrom["unique_identifier"]
-                            new_chromosomes += [new_chromosome]
-                            # but also keep the old one
-                            new_chromosomes += [chrom]
+                else:
+                    # until a viable next epoch in evolution is simulated keep re simulating the next epoch
+                    # buy viable we mean that we need to have at least one copy of every chromosome
+                    while(True):
+                        new_chromosomes = []
 
-                        elif change == -1: 
-                            # then lose the old chromosome
-                            continue
+                        for chrom in simulated_chromosomes[chrom_type]:
+                            # randomly draw from 
+                            #    losing this chromosome with probability p_down, 
+                            #    gaining another copy of this chromosome with probability p_up,
+                            #    nothing happening with probability 1 - p_up - down:
+                            change = np.random.choice([1,0,-1], 1, p=[p_up,1-p_up-p_down,p_down])
 
-                    # ensure that there is always at least one copy of every chromosome
-                    if len(new_chromosomes) != 0:
-                        break 
-               
-                # add those chromosomes into the genome
-                simulated_chromosomes[chrom_type] = new_chromosomes
+                            if change == 0:
+                                # keep the old chromosome only
+                                new_chromosomes += [chrom]
+
+                            elif change == 1:
+                                # create a new chromosome
+                                new_chromosome = copy.deepcopy(chrom)
+                                chrom_count += 1
+                                new_chromosome["unique_identifier"] = chrom_count
+                                new_chromosome["epoch_created"] = epoch
+                                new_chromosome["parent"] = chrom["unique_identifier"]
+                                new_chromosomes += [new_chromosome]
+                                # but also keep the old one
+                                new_chromosomes += [chrom]
+
+                            elif change == -1: 
+                                # then lose the old chromosome
+                                continue
+
+                        # ensure that there is always at least one copy of every chromosome
+                        if len(new_chromosomes) != 0:
+                            break 
+                   
+                    # add those chromosomes into the genome
+                    simulated_chromosomes[chrom_type] = new_chromosomes
 
     # some quick final sanity checks:
     if post == 0 or (mid == 0 and post == -1):
