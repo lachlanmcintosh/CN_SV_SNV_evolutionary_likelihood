@@ -1036,9 +1036,15 @@ def path_code_to_pre_mid_post(path):
 ##### 
 ##### 
 ##### 
-##### 
+#####
+# now we have to find a way to do the comparison of the trees
+#   1) what percentage of the strucutre of the tree is correct, is it correct topologically?
+#   2) how correct are the timing estimates within the tree?
+#   3) what percentage of the relative timing estimates are correct?
 
-# the following functions are mostly written with chatgpt3:
+
+# the following functions in step 9 are simple typical tree comparison functions are were mostly written with the help of chatgpt3
+
 
 # a small function to see if two trees are identical:
 # This function takes two trees as input, represented as lists, and returns a Boolean indicating whether they are topologically similar.
@@ -1052,8 +1058,8 @@ def is_the_same_CN_tree(tree1,tree2):
     if len(tree1) == 1:
         return tree1[0] == tree2[0]
 
-    return compare_trees(tree1[1], tree2[1]) and 
-            compare_trees(tree1[2], tree2[2])
+    return (compare_trees(tree1[1], tree2[1]) and 
+            compare_trees(tree1[2], tree2[2]))
 
 
 # a function that counts the number of matching nodes in the tree:
@@ -1064,9 +1070,12 @@ def is_the_same_CN_tree(tree1,tree2):
 def count_matching_CN_nodes(tree1,tree2):
     if len(tree1) != len(tree2):
         return 0
+
     if len(tree1) == 1:
         return 1 if tree1[0] == tree2[0] else 0
-    return (compare_trees(tree1[1], tree2[1]) + compare_trees(tree1[2], tree2[2]) +
+
+    return (compare_trees(tree1[1], tree2[1]) + 
+            compare_trees(tree1[2], tree2[2]) +
             (1 if tree1[0] == tree2[0] else 0))
 
 
@@ -1096,10 +1105,10 @@ def is_the_same_tree_by_epoch_and_time_created(tree1,tree2):
     if tree1['copy_number'] != tree2['copy_number']:
         return False
 
-    if tree1.get('child') is None and 
+    if (tree1.get('child') is None and 
         tree2.get('child') is None and 
         tree1.get('complement') is None and 
-        tree2.get('complement') is None:
+        tree2.get('complement') is None):
         return True
 
     if (tree1.get('child') is None) != (tree2.get('child') is None):
@@ -1108,10 +1117,12 @@ def is_the_same_tree_by_epoch_and_time_created(tree1,tree2):
     if (tree1.get('complement') is None) != (tree2.get('complement') is None):
         return False
 
-    if tree1.get('child') is not None and not compare_trees(tree1['child'], tree2['child']):
+    if (tree1.get('child') is not None and 
+            not compare_trees(tree1['child'], tree2['child'])):
         return False
 
-    if tree1.get('complement') is not None and not compare_trees(tree1['complement'], tree2['complement']):
+    if (tree1.get('complement') is not None and 
+            not compare_trees(tree1['complement'], tree2['complement'])):
         return False
 
     return True
@@ -1129,10 +1140,10 @@ def compare_and_sum_trees(tree1, tree2):
     if tree1['copy_number'] == tree2['copy_number']:
         sum += abs(tree1['epoch_created'] - tree2['epoch_created'])
 
-    if tree1.get('child') is None and 
+    if (tree1.get('child') is None and 
             tree2.get('child') is None and 
             tree1.get('complement') is None and 
-            tree2.get('complement') is None:
+            tree2.get('complement') is None):
         return sum
 
     if (tree1.get('child') is None) != (tree2.get('child') is None):
@@ -1184,7 +1195,7 @@ def CN_tree_list_and_epoch_array_to_dictionary_tree(CN_tree,epoch_list):
     dict_tree = convert_to_dict_tree(CN_tree)
     dict_tree = add_epoch_created(dict_tree, epoch_list)
 
-    return(dict_tree)
+    return dict_tree
 
 
 
@@ -1197,7 +1208,7 @@ def CN_tree_list_and_epoch_array_to_dictionary_tree(CN_tree,epoch_list):
 ##### 
 
 print("START")
-do_simulation = False #
+do_simulation = False 
 do_simulation = True 
 cache_results = False
 
@@ -1233,11 +1244,6 @@ if do_simulation:
     for chrom_type in CN_trees:
         print(CN_trees[chrom_type])
 
-    # now we have to find a way to do the comparison of the trees
-    # we want to see two things, 
-    #   1) what percentage of the strucutre of the tree is correct, is it correct topologically?
-    #   2) how correct are the timing estimates within the tree?
-    #   3) what percentage of the relative timing estimates are correct?
 
     exit()
 
