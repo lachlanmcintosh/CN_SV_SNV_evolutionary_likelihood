@@ -828,7 +828,7 @@ def get_path_code(code_list):
     return(output)
 
 
-def timing_struct_to_BP_likelihood_per_chrom(data, trees_and_timings, pre, mid, post):
+def timing_struct_to_BP_likelihood_per_chrom(data, trees_and_timings, pre, mid, post, window):
 
     all_BP_likelihoods = []
 
@@ -906,7 +906,7 @@ def timing_struct_to_BP_likelihood_per_chrom(data, trees_and_timings, pre, mid, 
     return(all_BP_likelihoods)
 
 
-def get_BP_likelihoods(trees_and_timings,pre,mid,post,p_up,p_down):
+def get_BP_likelihoods(trees_and_timings,pre,mid,post,p_up,p_down,window):
     file = precomputed_file_folder + \
         "/precomputed/store_pre_pickle/pre_mat129_u"+str(int(p_up))+ \
         "_d"+str(int(p_down))+".precomputed.pickle"
@@ -918,7 +918,8 @@ def get_BP_likelihoods(trees_and_timings,pre,mid,post,p_up,p_down):
                 trees_and_timings=trees_and_timings[chrom],
                 pre=pre,
                 mid=mid,
-                post=post
+                post=post,
+                window=window
                 )
     return(BP_likelihoods)
 

@@ -18,8 +18,4 @@
 
 # finalise code to fully compare the results with the truth.
 	# the chromosome per chromosome functions should be mostly done, just need to write simple functions to average over results.
-	#
 
-# write a second function to simulated a genome
-	# in tonys words, make it completely agnostic
-	#
