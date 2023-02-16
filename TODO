@@ -19,3 +19,7 @@
 # finalise code to fully compare the results with the truth.
 	# the chromosome per chromosome functions should be mostly done, just need to write simple functions to average over results.
 
+# treat the p_up,p_down and lambda optimisation problem with a convex solver. see how quick it can be done in an off the shelf library.
+# I don't nessecarily know if it is a convex problem but it might work well in practise anyway.
+#
+#

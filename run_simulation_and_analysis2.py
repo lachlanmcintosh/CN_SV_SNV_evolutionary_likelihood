@@ -209,10 +209,10 @@ def simulate_single_with_poisson_timestamps_names(p_up,p_down,pre,mid,post,rate,
 
 # now make a structure to compare the truth tree to the found tree
 def insert_node_into_truth_tree(tree,node):
-    print("node")
-    print("\t"+str(node))
-    print("tree")
-    print("\t"+str(tree))
+    #print("node")
+    #print("\t"+str(node))
+    #print("tree")
+    #print("\t"+str(tree))
     assert(node["unique_identifier"] != tree["unique_identifier"])
 
     if node["parent"] == tree["unique_identifier"]:
@@ -430,10 +430,10 @@ def CN_multiplicities_to_likelihoods(observed_CN_multiplicities):
     named_likelihoods.sort_values(by=['likelihood'], inplace=True, ascending=False)
 
     total = np.nansum(named_likelihoods["likelihood"])
-    print("total likelihood sum to normalise: "+str(total))
+    #print("total likelihood sum to normalise: "+str(total))
     named_likelihoods["likelihood"] /= total
-    print("best likelihoods")
-    print(named_likelihoods[:][0:300].to_string())
+    #print("best likelihoods")
+    #print(named_likelihoods[:][0:300].to_string())
 
     return(named_likelihoods)
 
@@ -828,12 +828,12 @@ def get_path_code(code_list):
     return(output)
 
 
-def timing_struct_to_BP_likelihood_per_chrom(data, trees_and_timings, pre, mid, post, window):
+def timing_struct_to_BP_likelihood_per_chrom(data, trees_and_timings, pre, mid, post):
 
     all_BP_likelihoods = []
 
     for these_tts in trees_and_timings:
-        print(these_tts)
+        #print(these_tts)
         if None in these_tts[3]:
             BP_likelihoods = -1
 
@@ -852,12 +852,15 @@ def timing_struct_to_BP_likelihood_per_chrom(data, trees_and_timings, pre, mid, 
             if post > 0:
                 path += ["A"]*post
 
-            print("timings")
-            print(these_tts)
-            print("copy numbers")
-            print(CNs)
-            print("branch lengths")
-            print(branch_lengths)
+            #print("timings")
+            #print(these_tts)
+
+            #print("copy numbers")
+            #print(CNs)
+
+            #print("branch lengths")
+            #print(branch_lengths)
+
             #>>> data = pickle.load(open("pre_mat129_u65_d10.precomputed.pickle",'rb'))
             # in the keys are all the possible paths...
             # each of these is a matrix that you can use to calculate the possible paths
@@ -885,28 +888,28 @@ def timing_struct_to_BP_likelihood_per_chrom(data, trees_and_timings, pre, mid, 
                     paths[row][col] = path_code
                     likelihoods[row][col] = likelihood
 
-            print("starts")
-            print(starts)
-            print("ends")
-            print(ends)
-            print("paths")
-            print(paths)
-            print("likelihoods")
-            print(likelihoods)
+            #print("starts")
+            #print(starts)
+            #print("ends")
+            #print(ends)
+            #print("paths")
+            #print(paths)
+            #print("likelihoods")
+            #print(likelihoods)
 
             ll = np.log(likelihoods)
-            print("loglikelihoods")
-            print(ll)
+            #print("loglikelihoods")
+            #print(ll)
             BP_likelihoods = np.sum(ll[:,1:], axis=1)
-            print("summed loglikelihoods")
-            print(BP_likelihoods)
+            #print("summed loglikelihoods")
+            #print(BP_likelihoods)
 
         all_BP_likelihoods += [BP_likelihoods]
 
     return(all_BP_likelihoods)
 
 
-def get_BP_likelihoods(trees_and_timings,pre,mid,post,p_up,p_down,window):
+def get_BP_likelihoods(trees_and_timings,pre,mid,post,p_up,p_down):
     file = precomputed_file_folder + \
         "/precomputed/store_pre_pickle/pre_mat129_u"+str(int(p_up))+ \
         "_d"+str(int(p_down))+".precomputed.pickle"
@@ -918,8 +921,7 @@ def get_BP_likelihoods(trees_and_timings,pre,mid,post,p_up,p_down,window):
                 trees_and_timings=trees_and_timings[chrom],
                 pre=pre,
                 mid=mid,
-                post=post,
-                window=window
+                post=post
                 )
     return(BP_likelihoods)
 
@@ -1037,10 +1039,59 @@ def find_best_SNV_likelihood(plambda, timings, BP_likelihoods):
 
     return(total,best) # also need to return which tree is the best and which row of that tree is the best.    
 
+def BP_and_SNV_loglik(plambda, p_up, p_down, trees_and_timings, pre, mid, post):
+    
+    BP_likelihoods = get_BP_likelihoods(
+            trees_and_timings=trees_and_timings,
+            pre=pre,
+            mid=mid,
+            post=post,
+            p_up=p_up,
+            p_down=p_down
+            )
+
+    total,best = find_best_SNV_likelihood(plambda,trees_and_timings,BP_likelihoods)
+
+    return(-total)
+
+
+def find_BP_and_SNV_loglik(plambda_start, p_up_start, p_down_start, trees_and_timings, pre, mid, post, window):
+
+    best_loglik = float("inf")
+    best_p_up = 0
+    best_p_down = 0
+    best_plambda = 0
+
+    for p_up in range(p_up_start - window, p_up_start + window + 1):
+        for p_down in range(p_down_start - window, p_down_start + window + 1):
+            def optimize_func(plambda):
+                return BP_and_SNV_loglik(plambda, p_up, p_down, trees_and_timings, pre, mid, post)
+
+            bounds = (0, None)
+            x0 = plambda_start
+
+
+            res = minimize_scalar(optimize_func, bounds=bounds, options={'disp': True})
+            if res.fun < best_loglik:
+                best_loglik = res.fun
+                best_p_up = p_up
+                best_p_down = p_down
+                best_plambda = res.x
+
+                print("Best Log-Likelihood:", best_loglik)
+                print("Best p_up:", best_p_up)
+                print("Best p_down:", best_p_down)
+                print("Best plambda:", best_plambda)
+
+    # You can also use other optimization methods such as SLSQP, Nelder-Mead, Powell, COBYLA, TNC, BFGS, etc, as specified by the method argument.
+
+    return(best_loglik, best_p_up, best_p_down, best_plambda, res)
+
+
 
 def objective_function_SNV_loglik(plambda,timings,BP_likelihoods):
     total,best = find_best_SNV_likelihood(plambda,timings,BP_likelihoods)
-    print(best)
+    #print(best)
     return(-total)
 
 
@@ -1229,6 +1280,7 @@ def CN_tree_list_and_epoch_array_to_dictionary_tree(CN_tree,epoch_list):
 print("START")
 do_simulation = False 
 do_simulation = True 
+cache_results = True
 cache_results = False
 
 pre = 2
@@ -1263,8 +1315,6 @@ if do_simulation:
     for chrom_type in CN_trees:
         print(CN_trees[chrom_type])
 
-
-    exit()
 
     print("observed chromosomal copynumbers")
     observed_CNs = count_CNs(simulated_chromosomes=simulated_chromosomes)
@@ -1316,7 +1366,7 @@ print("SNV multiplicities")
 observed_SNV_multiplicities = count_SNV_multiplicities(simulated_chromosomes)
 print(observed_SNV_multiplicities)
 
-SEARCH_DEPTH = 1 
+SEARCH_DEPTH = 20
 results = []
 for res in range(SEARCH_DEPTH):
     path = marginal_likelihoods["path"].iloc[res]
@@ -1363,34 +1413,57 @@ for res in range(SEARCH_DEPTH):
     # put branch lengths here, they are getting passed in to both comput ehte SNV likelihood and the BP likelihoods below
     # should not create the exact same data structure twice
 
-    BP_likelihoods = get_BP_likelihoods(
-            trees_and_timings=trees_and_timings,
-            pre=pre,
-            mid=mid,
-            post=post,
-            p_up=p_up,
-            p_down=p_down
-            )
+    #BP_likelihoods = get_BP_likelihoods(
+    #        trees_and_timings=trees_and_timings,
+    #        pre=pre,
+    #        mid=mid,
+    #        post=post,
+    #        p_up=p_up,
+    #        p_down=p_down
+    #        )
 
-    for chrom in BP_likelihoods:
-        print("chrom: "+str(chrom))
-        print("BP_L: "+str(BP_likelihoods[chrom]))
+    #for chrom in BP_likelihoods:
+    #    print("chrom: "+str(chrom))
+    #    print("BP_L: "+str(BP_likelihoods[chrom]))
+
+    from scipy.optimize import minimize_scalar
+
+    print("START NONLINEAR OPTIMISATION")
+    plambda_start = real_rate * 2
+    # these need to be changed to the values learnt in the array.
+    p_up_start = p_up
+    p_down_start = p_down
+    window = 5
+    best_loglik, best_p_up, best_p_down, best_plambda, result = 
+        find_BP_and_SNV_loglik(
+                plambda_start = plambda_start, 
+                p_up_start = p_up_start, 
+                p_down_start = p_down_start, 
+                trees_and_timings = trees_and_timings, 
+                pre = pre, 
+                mid = mid, 
+                post = post, 
+                window = window
+                )
+    print(res)
+    results += [[best_loglik, pre, mid, post, best_p_up, best_p_down, best_plambda, result]]
+
 
     # at some point evaluate the relative value of the likelihood contributed from the BP model to the likelihood contributed by the SNV model
-    outputs = []
-    for plambda in range(100):
-        lam = plambda*10
-        outputs += [(lam,objective_function_SNV_loglik(lam,trees_and_timings,BP_likelihoods))]
+    #outputs = []
+    #for plambda in range(100):
+    #    lam = plambda*10
+    #    outputs += [(lam,objective_function_SNV_loglik(lam,trees_and_timings,BP_likelihoods))]
 
     #iterating though linearly doesn't seem to be too bad. It isn't fast but it isn't too bad, something to fix later
     # maybe we can add in the BP likelihoods now. 
-    outputs.sort(key=lambda x: x[1])
-    print("genome likelihoods vs lambda parameter: "+str(outputs))
+    #outputs.sort(key=lambda x: x[1])
+    #print("genome likelihoods vs lambda parameter: "+str(outputs))
 
     # now we need to modify it so that we are also printing out the best subtree for each tree
-    result = find_best_SNV_likelihood(outputs[0][0],trees_and_timings,BP_likelihoods)
-    print(result)
-    results += [[result[0],pre,mid,post,p_up,p_down,result]]
+    #result = find_best_SNV_likelihood(outputs[0][0],trees_and_timings,BP_likelihoods)
+    #print(result)
+    #results += [[result[0],pre,mid,post,p_up,p_down,result]]
 
 for res in sorted(results):
     print(res)
