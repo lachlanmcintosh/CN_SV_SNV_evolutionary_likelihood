@@ -50,7 +50,7 @@ lengths = {0:8.18,
 # these parameters adjust the rate of how frequently SNVs occur per genome, so that longer chromosomes have a proportionally larger chance of a new SNV
 # lengths is normalised so that the average rate parameter associated with each chromosome is one:
 for chrom_type in lengths:
-    lengths[chrom_type] *= 23/100
+    lengths[chrom_type] *= 1/100
 
 
 # count paternity takes in a list of simulated chromosomes and returns the number of each paternal type, 
@@ -1128,8 +1128,8 @@ def is_the_same_CN_tree(tree1,tree2):
     if len(tree1) == 1:
         return tree1[0] == tree2[0]
 
-    return (compare_trees(tree1[1], tree2[1]) and 
-            compare_trees(tree1[2], tree2[2]))
+    return (is_the_same_CN_tree(tree1[1], tree2[1]) and 
+            is_the_same_CN_tree(tree1[2], tree2[2]))
 
 
 # a function that counts the number of matching nodes in the tree:
@@ -1360,6 +1360,23 @@ if not do_simulation:
 ##### 
 ##### 
 
+def sum_SNV_counts(observed_SNV_multiplicities):
+    d = observed_SNV_multiplicities
+    total = 0
+    for key1 in d:
+        for key2 in d[key1]:
+            total += d[key1][key2]
+    return total
+
+
+
+def sum_CN_multiplicities(observed_CN_multiplicities):
+    d = observed_CN_multiplicities
+    total = 0
+    for lst in d.values():
+        total += sum(lst)
+    return total
+
 
 
 print("SNV multiplicities")
@@ -1429,11 +1446,26 @@ for res in range(SEARCH_DEPTH):
     from scipy.optimize import minimize_scalar
 
     print("START NONLINEAR OPTIMISATION")
-    plambda_start = real_rate * 2
+    total_time = 1
+    if pre > 0:
+        total_time += pre
+    if mid > 0:
+        total_time += mid
+    if post > 0:
+        total_time += post
+
+    total_SNVs = sum_SNV_counts(observed_SNV_multiplicities)
+    total_chromosomes = sum_chrom_counts(observed_CN_multiplicities)
+    plambda_start = total_SNVs / total_time / total_chromosomes 
+    print("plambda_start: "+str(plambda_start))  
+    # this is a very rough estimate of expected value but it should align with the optimised for value. 
+    # and this should be checked at some point and this line removed once checked
+
     # these need to be changed to the values learnt in the array.
     p_up_start = p_up
     p_down_start = p_down
     window = 5
+
     best_loglik, best_p_up, best_p_down, best_plambda, result = 
         find_BP_and_SNV_loglik(
                 plambda_start = plambda_start, 
@@ -1445,6 +1477,7 @@ for res in range(SEARCH_DEPTH):
                 post = post, 
                 window = window
                 )
+
     print(res)
     results += [[best_loglik, pre, mid, post, best_p_up, best_p_down, best_plambda, result]]
 

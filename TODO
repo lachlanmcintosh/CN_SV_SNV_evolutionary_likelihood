@@ -1,25 +1,11 @@
 # this can be used as continually updated TODO list
 
-# add the ability to optimise over the pup and pdown parameters in the finer tree structures
-	# not all values need to be considered, probably just a small window of parameters around the estimated maximum
-	# a search distance of +-5 would only cost 5^2=25 or +-10 would only cost 100 rather than the full reevaluation 
-	# of 5050 (as calculated with the code below)
-
-	# sum = 0
-	# for i in range(1, 102):
-	# 	sum += i * (101 - i + 1)
-
-	# the cost of optimising over these values is significiant if we have to jointly optimise for the lambda paramter,
-	# it is probably better to heirarchically model this and optimise the branching process alone, and then update the 
-	# likelihood with the SNV values
-
-# add code that can optimise over the lambda parameters rather than the roughly grid approach currently used
-	# maybe half half, use a sparse grid that you search for local maxima around
-
 # finalise code to fully compare the results with the truth.
 	# the chromosome per chromosome functions should be mostly done, just need to write simple functions to average over results.
 
-# treat the p_up,p_down and lambda optimisation problem with a convex solver. see how quick it can be done in an off the shelf library.
-# I don't nessecarily know if it is a convex problem but it might work well in practise anyway.
+# find a way to record the likelihood contributions from the tree structe with and without the SNVs. 
+# The tree structure and the snvs are jointly dependent so it is not nessecarily meaningful to break this down but it will give an idea as to how the algo is working
+# #
 #
-#
+
+# 
