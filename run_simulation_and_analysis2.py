@@ -1144,7 +1144,7 @@ def find_BP_and_SNV_loglik(plambda_start, p_up_start, p_down_start, trees_and_ti
                 return BP_and_SNV_loglik(plambda, p_up, p_down, trees_and_timings, pre, mid, post)
 
             bounds = (0, None)
-            bounds = (max(plambda_start-plambda_window,0), plambda_start+plambda_window)
+            bounds = (plambda_start*plambda_window, plambda_start/plambda_window)
             x0 = plambda_start
 
 
@@ -1356,22 +1356,23 @@ def CN_tree_list_and_epoch_array_to_dictionary_tree(CN_tree,epoch_list):
 
 print("START")
 do_simulation = False 
-do_simulation = True 
+#do_simulation = True 
 
 cache_results = False
-cache_results = True
+#cache_results = True
 
 do_search = False
-do_search = True
+#do_search = True
 
+# the parameters that generated the simulation:
 pre = 1
 mid = 1
 post = -1
-p_up=0.13
-p_down=0.13
+p_up = 0.13
+p_down = 0.13
 rate = 100 
-top = 10
 
+# save the true parameters because there are name collisions:
 real_pre = pre
 real_mid = mid
 real_post = post
@@ -1379,14 +1380,19 @@ real_p_up = p_up
 real_p_down = p_down
 real_rate = rate
 
-
+# the parameters that govern the search depth:
+top = 10
 p_window = 1
-plambda_window = 30
-plambda_window = float("inf")
+plambda_window = 0.5 #30
+#plambda_window = float("inf")
 
 max_default_path_length = 5
 default_paths = [str(x) for x in range(max_default_path_length)]
-default_paths += [str(x) + "G" + str(y) for x in range(max_default_path_length) for y in range(max_default_path_length) if x+y <= max_default_path_length]
+default_paths += [str(x) + "G" + str(y) 
+        for x in range(max_default_path_length) 
+        for y in range(max_default_path_length) 
+        if x+y <= max_default_path_length]
+
 print("default paths")
 print(default_paths)
 print("default path lengths")
@@ -1589,18 +1595,49 @@ if do_search:
 
         print(res)
         results += [[best_loglik, pre, mid, post, best_p_up, best_p_down, best_plambda, result]]
+
         d = shelve.open('file2.txt')
         d['results'] = results
+        d['trees_and_timings'] = trees_and_timings
         d.close()
 else:
     # load the results array
     d = shelve.open('file2.txt')
     results = d['results']
+    trees_and_timings = d['trees_and_timings']
     d.close()
     # at some point evaluate the relative value of the likelihood contributed from the BP model to the likelihood contributed by the SNV model
 
 for res in sorted(results):
     print(res)
+    val, pre_est, mid_est, post_est, p_up_est, p_down_est, plambda_est, result = res
+    BP_likelihoods = get_BP_likelihoods(
+            trees_and_timings = trees_and_timings,
+            pre = pre_est,
+            mid = mid_est,
+            post = post_est,
+            p_up = p_up_est,
+            p_down = p_down_est
+            )
+
+    total,best = find_best_SNV_likelihood(plambda_est,trees_and_timings,BP_likelihoods)
+
+    for chrom in best:
+        print("chrom: "+str(chrom))
+        max_lik, tree_index, row_index = best[chrom]
+
+        CN_tree, labelled_tree, count, timings, parents = trees_and_timings[tree_index]
+
+        print(CN_tree)
+        print(labelled_tree)
+        print(count)
+        print(timings)
+        print(timings[row_index])
+        epoch_list = timings[row_index]
+        print(parents)
+        estimated_tree = CN_tree_list_and_epoch_array_to_dictionary_tree(CN_tree,epoch_list)
+        print(estimated_tree)
+
     # now compare the results to the truth!
     # CN tree is a list that is estimated when optimising the lieklihood. 
     # Need a way to pass that back
@@ -1608,6 +1645,5 @@ for res in sorted(results):
     # also need a way to pass that back to here.
     # also need a way to annotate the estimated tree with estimated number of SNVs under each branch of the tree.
     # being able to estimate the individual timing of each SNV will be very valuable
-    # estimated_tree = CN_tree_list_and_epoch_array_to_dictionary_tree(CN_tree,epoch_list):
 
         
