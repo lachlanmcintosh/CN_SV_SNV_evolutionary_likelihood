@@ -100,7 +100,7 @@ def simulate_single_with_poisson_timestamps_names(p_up,p_down,pre,mid,post,rate,
 
                 # add these SNVs to the chromosome 
                 for x in range(SNV_count + 1, SNV_count + additional_SNV_count + 1):
-                    chrom["SNVs"] += [{"unique_identifier":str(x),"epoch_created":epoch}] 
+                    chrom["SNVs"] += [{"unique_identifier":str(x), "epoch_created":epoch}] #, "location":location}] 
 
                 # update the SNV count
                 SNV_count = SNV_count + additional_SNV_count 
@@ -438,22 +438,178 @@ def CN_multiplicities_to_likelihoods(observed_CN_multiplicities):
     return(named_likelihoods)
 
 
-def likelihoods_to_marginal_likelihoods(likelihoods):
-    marginal_likelihoods = likelihoods#.copy()
+def likelihoods_to_marginal_likelihoods(likelihoods, top, default_paths=[]):
+    marginal_likelihoods = likelihoods.copy()
+
+    # Compute mean_p_up and mean_p_down weighted by likelihood
     marginal_likelihoods["mean_p_up"]   = marginal_likelihoods["p_up"]  *marginal_likelihoods["likelihood"]
     marginal_likelihoods["mean_p_down"] = marginal_likelihoods["p_down"]*marginal_likelihoods["likelihood"]
+
+    # Group by path and sum likelihood, mean_p_up, and mean_p_down
     marginal_likelihoods = marginal_likelihoods.groupby(["path"], as_index=False)[['likelihood','mean_p_up','mean_p_down']].sum()
     marginal_likelihoods.dropna(axis=0)
-    marginal_likelihoods.sort_values(by=['likelihood'], inplace=True, ascending=False)
-    total = sum(marginal_likelihoods["likelihood"]) 
-    print("total marginal liklihoods sum to normalise: "+str(total))
-    marginal_likelihoods["mean_p_up"] /= marginal_likelihoods["likelihood"] 
-    marginal_likelihoods["mean_p_down"] /= marginal_likelihoods["likelihood"]
-    print("best marginal likelihoods")
-    print(marginal_likelihoods[:][0:20].to_string())
-    print(sum(marginal_likelihoods["likelihood"]))
 
-    return(marginal_likelihoods)
+    # Sort by likelihood in descending order
+    marginal_likelihoods.sort_values(by=['likelihood'], inplace=True, ascending=False)
+
+    # Normalize mean_p_up and mean_p_down by dividing by likelihood
+    marginal_likelihoods["mean_p_up"] /= marginal_likelihoods["likelihood"]
+    marginal_likelihoods["mean_p_down"] /= marginal_likelihoods["likelihood"]
+
+    # Print total marginal likelihoods to normalize
+    total = sum(marginal_likelihoods["likelihood"])
+    #print("total marginal likelihoods sum to normalize: "+str(total))
+
+    # Print the best marginal likelihoods
+    #print("best marginal likelihoods:")
+    #print(marginal_likelihoods.head(top).to_string())
+    #print(sum(marginal_likelihoods["likelihood"]))
+
+    # Get the top n marginal likelihoods
+    top_n = marginal_likelihoods.head(top)
+
+    # Get the best marginal likelihood for each path in default_paths
+    best_defaults = pd.DataFrame()
+    for path in default_paths:
+        default = marginal_likelihoods[marginal_likelihoods['path'] == path].sort_values('likelihood', ascending=False).head(1)
+        best_defaults = pd.concat([best_defaults, default])
+
+    # Combine top_n and best_defaults DataFrames
+    result = pd.concat([top_n, best_defaults])
+
+    return result
+
+#def likelihoods_to_marginal_likelihoods2(likelihoods,top):
+#    marginal_likelihoods = likelihoods#.copy()
+#    marginal_likelihoods["mean_p_up"]   = marginal_likelihoods["p_up"]  *marginal_likelihoods["likelihood"]
+#    marginal_likelihoods["mean_p_down"] = marginal_likelihoods["p_down"]*marginal_likelihoods["likelihood"]
+#    marginal_likelihoods = marginal_likelihoods.groupby(["path"], as_index=False)[['likelihood','mean_p_up','mean_p_down']].sum()
+#    marginal_likelihoods.dropna(axis=0)
+#    marginal_likelihoods.sort_values(by=['likelihood'], inplace=True, ascending=False)
+#    total = sum(marginal_likelihoods["likelihood"]) 
+#    print("total marginal liklihoods sum to normalise: "+str(total))
+#    marginal_likelihoods["mean_p_up"] /= marginal_likelihoods["likelihood"] 
+#    marginal_likelihoods["mean_p_down"] /= marginal_likelihoods["likelihood"]
+#    print("best marginal likelihoods")
+#    print(marginal_likelihoods[:][0:20].to_string())
+#    print(sum(marginal_likelihoods["likelihood"]))
+#    
+#    result = marginal_likelihoods.head(top)
+#    return(result)
+
+
+# CHATGPT3 helped with the follwoing funciton:
+# here's how you can get the 10 rows with the highest likelihood while ensuring that the entries in the path column are distinct:
+
+import pandas as pd
+
+def likelihoods_to_best_likelihood_by_path(likelihoods, top, default_paths=[]):
+    df = likelihoods.copy()
+
+    # Sort the DataFrame by the likelihood column in descending order
+    df = df.sort_values('likelihood', ascending=False)
+
+    # Drop duplicates in the path column, keeping only the first occurrence
+    df = df.drop_duplicates(subset='path', keep='first')
+
+    # Take the top n rows
+    top_n = df.head(top)
+
+    # Find the best row for each path in default_paths
+    best_defaults = pd.DataFrame()
+    for path in default_paths:
+        default = df[df['path'] == path].sort_values('likelihood', ascending=False).head(1)
+        best_defaults = pd.concat([best_defaults, default])
+
+    # Combine top_n and best_defaults DataFrames
+    result = pd.concat([top_n, best_defaults])
+
+    return result
+# The updated function takes in three parameters: likelihoods is the input DataFrame containing likelihood values, n is the number of rows to return with the highest likelihood values, and default_paths is a list of paths for which the best row should be included in the output DataFrame.
+# The function first sorts the input DataFrame by likelihood value, drops any duplicates based on the path column, and then selects the top n rows. 
+# The top n rows are stored in a DataFrame called top_n.
+# The function then iterates over each path in default_paths and selects the row with the highest likelihood value for that path. 
+# These rows are stored in a DataFrame called best_defaults.
+# Finally, the function combines the top_n and best_defaults DataFrames using the pd.concat() function and returns the resulting DataFrame. 
+# This DataFrame contains the top n rows with the highest likelihood values, as well as the best row for each path in default_paths.
+
+
+def likelihoods_to_marginal_likelihoods(likelihoods, top, default_paths=[]):
+    # Create a copy of the likelihoods DataFrame
+    marginal_likelihoods = likelihoods.copy()
+
+    # Calculate the mean probabilities
+    marginal_likelihoods["mean_p_up"] = marginal_likelihoods["p_up"] * marginal_likelihoods["likelihood"]
+    marginal_likelihoods["mean_p_down"] = marginal_likelihoods["p_down"] * marginal_likelihoods["likelihood"]
+
+    # Group by path and sum likelihoods and mean probabilities
+    marginal_likelihoods = marginal_likelihoods.groupby(["path"], as_index=False)[['likelihood','mean_p_up','mean_p_down']].sum()
+
+    # Remove rows with zero likelihood
+    marginal_likelihoods = marginal_likelihoods[marginal_likelihoods["likelihood"] != 0]
+
+    # Remove duplicate rows
+    marginal_likelihoods = marginal_likelihoods.drop_duplicates(subset='path', keep='first')
+
+    # Take the top n rows by likelihood value
+    result = marginal_likelihoods.head(top)
+
+    # Get the best row associated with each path in the default_paths list
+    for path in default_paths:
+        best_row = marginal_likelihoods.loc[marginal_likelihoods["path"] == path].sort_values('likelihood', ascending=False).iloc[0]
+        result = result.append(best_row)
+
+    # Remove duplicate rows again, in case any of the default paths were already in the top n rows
+    result = result.drop_duplicates(subset='path', keep='first')
+
+    # Normalize the mean probabilities
+    result["mean_p_up"] /= result["likelihood"]
+    result["mean_p_down"] /= result["likelihood"]
+
+    # Sort the result DataFrame by likelihood in descending order
+    result = result.sort_values(by=['likelihood'], inplace=False, ascending=False)
+
+    # Print total likelihood for debugging
+    total = sum(result["likelihood"])
+    print("Total marginal likelihoods sum to normalize: " + str(total))
+
+    # Print the best marginal likelihoods
+    #print("Best marginal likelihoods:")
+    #print(result[:][0:20].to_string())
+
+    # Return the result DataFrame
+    return result
+
+
+def likelihoods_to_best_likelihood_by_path(likelihoods, top, default_paths=[]):
+    # Create a copy of the likelihoods DataFrame
+    df = likelihoods.copy()
+
+    # Sort the DataFrame by likelihood in descending order
+    df = df.sort_values('likelihood', ascending=False)
+
+    # Remove duplicate rows
+    df = df.drop_duplicates(subset='path', keep='first')
+
+    # Remove rows with zero likelihood
+    df = df[df["likelihood"] != 0]
+
+    # Take the top n rows by likelihood value
+    result = df.head(top)
+
+    # Get the best row associated with each path in the default_paths list
+    for path in default_paths:
+        best_row = df.loc[df["path"] == path].sort_values('likelihood', ascending=False).iloc[0]
+        result = result.append(best_row)
+
+    # Remove duplicate rows again, in case any of the default paths were already in the top n rows
+    result = result.drop_duplicates(subset='path', keep='first')
+
+    # Sort the result DataFrame by likelihood in descending order
+    result = result.sort_values('likelihood', ascending=False)
+
+    # Return the result DataFrame
+    return result
 
 
 ###### STEP 3; calculate the SNV multiplicities of each chromosome
@@ -1281,14 +1437,15 @@ print("START")
 do_simulation = False 
 do_simulation = True 
 cache_results = True
-cache_results = False
+#cache_results = False
 
-pre = 2
-mid = 2
+pre = 1
+mid = 1
 post = -1
 p_up=0.13
 p_down=0.13
-rate = 5
+rate = 100 
+top = 10
 
 real_pre = pre
 real_mid = mid
@@ -1328,9 +1485,34 @@ if do_simulation:
     likelihoods = CN_multiplicities_to_likelihoods(observed_CN_multiplicities=observed_CN_multiplicities)
     print(likelihoods)
 
+    max_default_path_length = 3
+    default_paths = [str(x) for x in range(max_default_path_length)]
+    default_paths += [str(x) + "G" + str(y) for x in range(max_default_path_length) for y in range(max_default_path_length) if x+y <= max_default_path_length]
+    print("default paths")
+    print(default_paths)
+    print("default path lengths")
+    print(len(default_paths))
+
+    
+    top = 10
+
     print("marginals")
-    marginal_likelihoods = likelihoods_to_marginal_likelihoods(likelihoods=likelihoods)
+    marginal_likelihoods = likelihoods_to_marginal_likelihoods(
+            likelihoods = likelihoods,
+            top = top,
+            default_paths = default_paths)
+
     print(marginal_likelihoods)
+
+    print("top likelihoods")
+    top_likelihoods = likelihoods_to_best_likelihood_by_path(
+            likelihoods = likelihoods,
+            top = top,
+            default_paths = default_paths)
+
+    print(top_likelihoods)
+
+    pd.concat([marginal_likelihoods,top_likelihoods])
 
     if cache_results:
         # need to save the important datastructures up to hear and then just work onwards from here to speed up development
@@ -1340,6 +1522,7 @@ if do_simulation:
         d['observed_CNs'] = observed_CNs
         d['likelihoods'] = likelihoods
         d['marginal_likelihoods'] = marginal_likelihoods
+        d['top_likelihoods'] = top_likelihoods
         d.close()
 
 if not do_simulation:
@@ -1350,6 +1533,7 @@ if not do_simulation:
     observed_CNs = d['observed_CNs']
     likelihoods = d['likelihoods']
     marginal_likelihoods = d['marginal_likelihoods']
+    top_likelihoods = d['top_likelihoods']
     d.close()
 
 
@@ -1383,12 +1567,14 @@ print("SNV multiplicities")
 observed_SNV_multiplicities = count_SNV_multiplicities(simulated_chromosomes)
 print(observed_SNV_multiplicities)
 
-SEARCH_DEPTH = 20
+searchable_likelihoods = np.vstack(marginal_likelihoods,top_likelihoods)
+
+SEARCH_DEPTH = 2*top
 results = []
 for res in range(SEARCH_DEPTH):
-    path = marginal_likelihoods["path"].iloc[res]
-    p_up = marginal_likelihoods['mean_p_up'].iloc[res].round()
-    p_down = marginal_likelihoods['mean_p_down'].iloc[res].round()
+    path = searchable_likelihoods["path"].iloc[res]
+    p_up = searchable_likelihoods['mean_p_up'].iloc[res].round()
+    p_down = searchable_likelihoods['mean_p_down'].iloc[res].round()
     pre, mid, post = path_code_to_pre_mid_post(path)
 
     if res == SEARCH_DEPTH - 1:
@@ -1466,8 +1652,7 @@ for res in range(SEARCH_DEPTH):
     p_down_start = p_down
     window = 5
 
-    best_loglik, best_p_up, best_p_down, best_plambda, result = 
-        find_BP_and_SNV_loglik(
+    best_loglik, best_p_up, best_p_down, best_plambda, result = find_BP_and_SNV_loglik(
                 plambda_start = plambda_start, 
                 p_up_start = p_up_start, 
                 p_down_start = p_down_start, 
@@ -1500,5 +1685,13 @@ for res in range(SEARCH_DEPTH):
 
 for res in sorted(results):
     print(res)
+    # now compare the results to the truth!
+    # CN tree is a list that is estimated when optimising the lieklihood. 
+    # Need a way to pass that back
+    # epoch list is the row in the epoch array that was optimised for
+    # also need a way to pass that back to here.
+    # also need a way to annotate the estimated tree with estimated number of SNVs under each branch of the tree.
+    # being able to estimate the individual timing of each SNV will be very valuable
+    # estimated_tree = CN_tree_list_and_epoch_array_to_dictionary_tree(CN_tree,epoch_list):
 
         

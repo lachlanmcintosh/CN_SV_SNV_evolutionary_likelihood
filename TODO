@@ -8,4 +8,6 @@
 # #
 #
 
-# 
+SH i
+
+# FINISH UPDATING THE SEARCH TO ALSO INCLUDE THE peak likelihoods, not just the marginals.# 
