@@ -1311,27 +1311,34 @@ def compare_and_sum_trees(tree1, tree2):
 # write a function that takes a CN tree and a timings estimate and puts them together in the same structure as the truth data for comparison
 # Here's a function that takes a tree data structure in the form [value, [child1, child2]] and converts it into a dictionary-like data structure in the form {'copy_number': value, 'child': child1, 'complement': child2}:
 def convert_to_dict_tree(tree):
-    copy_number, children = tree
-    child1, child2 = children
-    child1 = convert_to_dict_tree(child1) if isinstance(child1, list) else child1
-    child2 = convert_to_dict_tree(child2) if isinstance(child2, list) else child2
+    if len(tree) == 3:
+        copy_number, child1, child2 = tree
+        child1 = convert_to_dict_tree(child1) if isinstance(child1, tuple) else child1
+        child2 = convert_to_dict_tree(child2) if isinstance(child2, tuple) else child2
+        return {'copy_number': copy_number, 'child': child1, 'complement': child2}
+    elif len(tree) == 1:
+        copy_number = tree[0]
+        return {'copy_number': copy_number}
 
-    return {'copy_number': copy_number, 'child': child1, 'complement': child2}
+    else:
+        sys.exit()
 # The function first unpacks the value and [child1, child2] components of the input tree and assigns them to the variables copy_number and children. It then further unpacks children into child1 and child2. If either child1 or child2 are lists, the function recursively calls convert_to_dict_tree
 
 
 # now write a function with two arguments, the first is a dictionary-like tree data structure in the form {'copy_number': value, 'child': child1, 'complement': child2} called tree and the second is a list of numbers which is as long as the number of nodes in the tree. Add these numbers to the tree like data structure under the key "epoch_created" in a depth first way
 # Here's a function that takes a dictionary-like tree data structure tree and a list of numbers and adds the numbers to the tree data structure under the key 'epoch_created' in a depth-first manner:
-def add_epoch_created(tree, numbers):
-    tree['epoch_created'] = numbers.pop(0)
+def add_epoch_created(dict_tree, epoch_list):
+    print(dict_tree)
+    print(epoch_list)
+    dict_tree['epoch_created'] = epoch_list.pop(0)
 
-    if 'child' in tree:
-        add_epoch_created(tree['child'], numbers)
+    if 'child' in dict_tree:
+        add_epoch_created(dict_tree['child'], epoch_list)
 
-    if 'complement' in tree:
-        add_epoch_created(tree['complement'], numbers)
+    if 'complement' in dict_tree:
+        add_epoch_created(dict_tree['complement'], epoch_list)
 
-    return tree
+    return dict_tree
 
 # The function first adds the first element of numbers to the tree dictionary under the key 'epoch_created' and removes it from numbers.
 # If the 'child' key is present in the tree dictionary, the function recursively calls add_epoch_created on the value of the 'child' key with the updated numbers list. 
@@ -1340,8 +1347,9 @@ def add_epoch_created(tree, numbers):
 # now we write a function that can fully convert to the discovered tree and turn it into the form of the generated tree
 def CN_tree_list_and_epoch_array_to_dictionary_tree(CN_tree,epoch_list):
     dict_tree = convert_to_dict_tree(CN_tree)
+    print(dict_tree)
+    epoch_list = list(epoch_list)
     dict_tree = add_epoch_created(dict_tree, epoch_list)
-
     return dict_tree
 
 
@@ -1626,15 +1634,30 @@ for res in sorted(results):
         print("chrom: "+str(chrom))
         max_lik, tree_index, row_index = best[chrom]
 
-        CN_tree, labelled_tree, count, timings, parents = trees_and_timings[tree_index]
+        print("trees and timings")
+        print(trees_and_timings)
+        print("best one")
+        print(tree_index)
+        print(trees_and_timings[chrom][tree_index])
+        CN_tree, labelled_tree, count, timings, parents = trees_and_timings[chrom][tree_index]
 
+        print("CN tree")
         print(CN_tree)
+        print("labelled tree")
         print(labelled_tree)
+        print("count")
         print(count)
+        print("timings")
         print(timings)
+        print("row_index")
+        print(row_index)
         print(timings[row_index])
+        print("epoch_list")
         epoch_list = timings[row_index]
+        print(epoch_list)
+        print("parents")
         print(parents)
+
         estimated_tree = CN_tree_list_and_epoch_array_to_dictionary_tree(CN_tree,epoch_list)
         print(estimated_tree)
 
