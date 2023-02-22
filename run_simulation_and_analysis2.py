@@ -350,8 +350,9 @@ def CN_tree_from_truth_tree(truth_tree):
     return(CN_tree)
 
 
+
+
 def make_left_heavy(tree):
-    assert(len(tree) == 1 or len(tree) == 3)
 
     if len(tree) == 1:
         return(tree)
@@ -1235,6 +1236,28 @@ def count_nodes(tree):
         return count_nodes(tree["child"]) + count_nodes(tree["complement"]) + 1
     return 1 
 
+# here's an example implementation of a function that takes a tree and swaps the 'child' and 'complement' nodes to ensure that 'child' always has a greater 'copy_number' than 'complement'. In case of ties, it also ensures that 'child' has a smaller 'epoch_created':
+def sort_tree_by_copy_number(tree):
+    if tree is None:
+        return None
+
+    if 'child' in tree and tree['child'] is not None and \
+        'complement' in tree and tree['complement'] is not None:
+        if tree['complement'].get('copy_number') > tree['child'].get('copy_number'):
+            tree['child'], tree['complement'] = tree['complement'], tree['child']
+        elif tree['complement'].get('copy_number') == tree['child'].get('copy_number') and \
+            tree['child'].get('epoch_created') > tree['complement'].get('epoch_created'):
+            tree['child'], tree['complement'] = tree['complement'], tree['child']
+        sort_tree_by_copy_number(tree['child'])
+        sort_tree_by_copy_number(tree['complement'])
+    elif 'child' in tree and tree['child'] is not None:
+        sort_tree_by_copy_number(tree['child'])
+    elif 'complement' in tree and tree['complement'] is not None:
+        sort_tree_by_copy_number(tree['complement'])
+    return tree
+
+# This function uses recursion to traverse the tree and swaps the 'child' and 'complement' nodes whenever the 'copy_number' of 'complement' is greater than that of 'child', or when they have the same 'copy_number' and the 'epoch_created' of 'child' is greater than that of 'complement'. The function returns the modified tree.
+
 
 
 # This function takes two trees as input, each represented as a dictionary, and returns a Boolean indicating whether they are topologically identical and have the same epoch_created value and copy_number value at each node. 
@@ -1282,9 +1305,10 @@ def is_the_same_dict_tree_by_epoch_and_time_created(tree1,tree2):
 def sum_tree_distance(tree1, tree2):
     sum = 0
 
-    if (tree1['copy_number'] == tree2['copy_number'] and 
-        tree1["epoch_created"] is not None and 
-        tree2["epoch_created"] is not None):
+    if (tree1 is not None and tree2 is not None and
+            tree1['copy_number'] == tree2['copy_number'] and 
+            tree1["epoch_created"] is not None and 
+            tree2["epoch_created"] is not None):
         sum += abs(tree1['epoch_created'] - tree2['epoch_created'])
 
     if tree1.get('child') is not None:
@@ -1300,7 +1324,7 @@ def count_nodes_with_same_copy_number(tree1, tree2):
     if 'copy_number' in tree1 and 'copy_number' in tree2 and tree1['copy_number'] == tree2['copy_number']:
         count += 1
     for child_key in ['child', 'complement']:
-        if child_key in tree1 and child_key in tree2:
+        if child_key in tree1 and child_key in tree2 and tree1[child_key] is not None and tree2[child_key] is not None:
             count += count_nodes_with_same_copy_number(tree1[child_key], tree2[child_key])
     return count
 #This function uses recursion to iterate through both trees and count the number of nodes that have the same 'copy_number' value. It first checks if the current nodes in both trees have a 'copy_number' key, and if they do and their values are equal, it increments the count by 1.
@@ -1312,7 +1336,7 @@ def count_nodes_with_same_properties(tree1, tree2):
     'epoch_created' in tree1 and 'epoch_created' in tree2 and tree1['epoch_created'] == tree2['epoch_created']:
         count += 1
     for child_key in ['child', 'complement']:
-        if child_key in tree1 and child_key in tree2:
+        if child_key in tree1 and child_key in tree2 and tree1[child_key] is not None and tree2[child_key] is not None:
             count += count_nodes_with_same_properties(tree1[child_key], tree2[child_key])
     return count
 # This function is very similar to the previous one, but now it also checks if both 'copy_number' and 'epoch_created' fields are the same for the nodes in both trees. The function uses the same recursion strategy to traverse both trees.
@@ -1332,6 +1356,20 @@ def convert_to_dict_tree(tree):
     else:
         sys.exit()
 # The function first unpacks the value and [child1, child2] components of the input tree and assigns them to the variables copy_number and children. It then further unpacks children into child1 and child2. If either child1 or child2 are lists, the function recursively calls convert_to_dict_tree
+
+# this function converts a tree in dictionary format to a list representation so its easy to visually inspect
+def convert_dict_tree_to_list(tree):
+    if tree is None:
+        return None
+
+    copy_number = tree.get('copy_number')
+    epoch_created = tree.get('epoch_created')
+    child_tree = convert_dict_tree_to_list(tree.get('child'))
+    complement_tree = convert_dict_tree_to_list(tree.get('complement'))
+
+    return [(copy_number, epoch_created), child_tree, complement_tree]
+# This function uses recursion to traverse the dictionary tree and convert each node into a tuple containing the 'copy_number' and 'epoch_created' fields, and two lists representing the 'child' and 'complement' subtrees, respectively. If a node does not have a 'child' or 'complement' subtree, the corresponding list will be None.
+
 
 
 # now write a function with two arguments, the first is a dictionary-like tree data structure in the form {'copy_number': value, 'child': child1, 'complement': child2} called tree and the second is a list of numbers which is as long as the number of nodes in the tree. Add these numbers to the tree like data structure under the key "epoch_created" in a depth first way
@@ -1672,6 +1710,8 @@ for res in sorted(results):
         print(estimated_tree)
         estimated_trees[chrom] = estimated_tree
 
+        
+
     # now compare the results to the truth!
     # CN tree is a list that is estimated when optimising the lieklihood. 
     # Need a way to pass that back
@@ -1682,8 +1722,13 @@ for res in sorted(results):
 
     simulated_trees = create_truth_trees(simulated_chromosomes)
     for chrom in estimated_trees:
-        print("The estimated tree is: " + str(estimated_trees[chrom]))
-        print("The simulated tree is: " + str(simulated_trees[chrom]))
+        simulated_trees[chrom] = sort_tree_by_copy_number(simulated_trees[chrom])
+        estimated_trees[chrom] = sort_tree_by_copy_number(estimated_trees[chrom])
+
+        #print("The estimated tree is: " + str(estimated_trees[chrom]))
+        #print("The simulated tree is: " + str(simulated_trees[chrom]))
+        print("The simulated tree looks like: " + str(convert_dict_tree_to_list(simulated_trees[chrom])))
+        print("The estimated tree looks like: " + str(convert_dict_tree_to_list(estimated_trees[chrom])))
         if is_the_same_dict_tree_by_epoch_and_time_created(estimated_trees[chrom],simulated_trees[chrom]):
             print("They are the same")
         else:
@@ -1694,7 +1739,6 @@ for res in sorted(results):
         print("In total there are " + str(tree_sim) + " nodes that have the exact same copy numbers out of " + 
                 str(sim_tree_len))
         print("So this tree is " + str(int(float(tree_sim)*100/float(sim_tree_len))) + "% correct.")
-
         tree_sim = count_nodes_with_same_properties(estimated_trees[chrom], simulated_trees[chrom])    
         print("In total there are " + str(tree_sim) + " nodes that have the exact same copy numbers and epochs created out of " + 
                 str(sim_tree_len))
@@ -1703,5 +1747,9 @@ for res in sorted(results):
         print("It is quite hard to get the tree exactly correct so of the nodes that are correct by copynumber sum the difference in epoch_created")
         tree_sim = sum_tree_distance(estimated_trees[chrom], simulated_trees[chrom])
         print("The average distance per node is " + str(float(tree_sim)/float(sim_tree_len)))
+
+# there seem to be a few artificial differences in the trees, like arbritrarily different timing conventions
+# need to fix this to be able to estimate how well we are doing at tree similarity.
+
 
 
