@@ -63,7 +63,7 @@ def count_paternity(chromosomes,paternal):
 def simulate_single_with_poisson_timestamps_names(p_up,p_down,pre,mid,post,rate,agnostic=False):
     # this function simulates the evolution of a cancer genome with whole chromosome copy number changes and SNV's
     # pre, mid and post model the number of epochs / cell cycles that this genome undergoes between rounds of GD if they occur
-e   # pre is the number of epochs that occur before the first round of genome doubling, if there is a round of GD
+    # pre is the number of epochs that occur before the first round of genome doubling, if there is a round of GD
     # mid is the number of epochs that occur after the first round of genome doubling and before the second round of genome doubling
     #   if there is no first round of genome doubling then mid is set to be -1 AND post is also -1
     # post is the number of epochs that occur after the second round of genome doubling
@@ -92,7 +92,7 @@ e   # pre is the number of epochs that occur before the first round of genome do
                     "SNVs":[], 
                     # a list of dicitonaries that describe the SNVs found on the chromosome, 
                     # a future extension might be to give these SNVs specific locaitons and simulate intra-chromosomal CN changes
-                    "dead": False i
+                    "dead": False 
                     # if the chromosome is lost in the simulation we still need to record it to lineage tracing for the truth tree
                     } for x in (0,23)]
 
@@ -110,19 +110,29 @@ e   # pre is the number of epochs that occur before the first round of genome do
         for chrom_type in simulated_chromosomes:
             for chrom in simulated_chromosomes[chrom_type]:
                 if chrom["dead"]:
+                    # then the chromosome has already been lost in the simulation => not appropriate to simulate SNVs on it
                     continue
                 # generate a random number of SNVs proportional to the length of the genome:
                 additional_SNV_count = np.random.poisson(rate * lengths[chrom_type],1)[0]
 
                 # add these SNVs to the chromosome 
                 for x in range(SNV_count + 1, SNV_count + additional_SNV_count + 1):
-                    chrom["SNVs"] += [{"unique_identifier":str(x), "epoch_created":epoch}] #, "location":location}] 
+                    chrom["SNVs"] += [{"unique_identifier":str(x), "epoch_created":epoch}] #, "location":location}] A
+                    # location can be added in later to 
 
                 # update the SNV count
                 SNV_count = SNV_count + additional_SNV_count 
 
+##### RE READ THROUGH FROM HERE
+##### RE READ THROUGH FROM HERE
+##### RE READ THROUGH FROM HERE
+##### RE READ THROUGH FROM HERE
+##### RE READ THROUGH FROM HERE
+##### RE READ THROUGH FROM HERE
+
         # if there is a genome doubling it has to be after post, so post cannot equal -1 if mid does
         # enforce this assertion as it may be easy to forget this later on:
+
         assert( not(mid == -1 and post != -1) ) 
 
         # simulate the changes in copy number, but keep track of the SNVs
@@ -355,6 +365,48 @@ def remove_SNVs_from_tree(tree):
 
     return(tree)
 
+
+# code to remove all dead nodes in the tree while also updating the parent field of the removed node's children to the parent of the removed node:
+def remove_dead_nodes(tree):
+    if tree is None:
+        return None
+
+    if tree['unique_identifier'] != -1:
+        # recursively continue to remove dead children from this current node until its children are all not dead:
+        while True:
+            if tree.get('child') is not None and tree['child'].get('dead'):
+                parent = tree["parent"]
+                tree = tree['complement']
+                tree["parent"] = parent
+
+            elif tree.get('complement') is not None and tree['complement'].get('dead'):
+                parent = tree["parent"]
+                tree = tree['child']
+                tree["parent"] = parent
+
+            else:
+                break
+
+    # the children themselves may not be dead, but their children maybe, remove those:
+    if tree.get('child') is not None:
+        tree['child'] = remove_dead_nodes(tree['child'])
+
+    if tree.get('complement') is not None:
+        tree['complement'] = remove_dead_nodes(tree['complement'])
+
+    return tree
+
+# The function takes in the tree as an argument and checks if the current node is dead or not. 
+# If it is dead, the function moves the children of that node up to the parent of the dead node, by updating their parent field to be the same as the parent field of the dead node. 
+# The function then recursively removes the dead node's children, returning either the child or complement of the dead node depending on which is not None. 
+# If neither child is present, then the function returns None to remove the dead node from the tree. 
+# If the current node is not dead, the function recursively removes the dead nodes from its children and returns the updated tree.
+# The code checks if the parent of a dead node is equal to "-1" before removing it. If the parent is "-1", then the node is not removed and the function moves on to its children.
+
+
+
+
+
 def create_truth_trees(simulated_chromosomes):
     #there is a tree fro every chromosome
     trees = {}
@@ -375,14 +427,27 @@ def create_truth_trees(simulated_chromosomes):
         # insert all nodes and add metadat to tree and simplify:
         for new_node in sorted_list:
             trees[chrom_type] = insert_node_into_truth_tree(tree,new_node[1])
-           
-        #print(trees[chrom_type])
+        print("with nodes inserted:")
+        print(trees[chrom_type])
         trees[chrom_type] = add_copynumber_to_tree(trees[chrom_type])
-        #print(trees[chrom_type])
+        print(CN_tree_from_truth_tree(trees[chrom_type]))
+        print("with copynumber annotated:")
+        print(trees[chrom_type])
         trees[chrom_type] = add_SNV_multiplicity_to_tree(trees[chrom_type])
-        #print(trees[chrom_type])
+        print(CN_tree_from_truth_tree(trees[chrom_type]))
+        print("with SNV multiplicity:")
+        print(trees[chrom_type])
         trees[chrom_type] = remove_SNVs_from_tree(trees[chrom_type])
-        #print(trees[chrom_type])
+        print(CN_tree_from_truth_tree(trees[chrom_type]))
+        print("with SNVs removed from the tree:")
+        print(trees[chrom_type])
+        print(CN_tree_from_truth_tree(trees[chrom_type]))
+        trees[chrom_type] = remove_dead_nodes(trees[chrom_type])
+        print("with dead nodes removed:")
+        print(trees[chrom_type])
+        print(CN_tree_from_truth_tree(trees[chrom_type]))
+        print(make_left_heavy(CN_tree_from_truth_tree(trees[chrom_type])))
+        print("######\n"*5)
 
     return(trees)
 
@@ -1482,7 +1547,7 @@ mid = 1
 post = -1
 p_up = 0.13
 p_down = 0.13
-rate = 1
+rate = 100
 
 print("SIMULATION PARAMETERS ARE: ")
 print("pre: "+ str(pre))
@@ -1503,7 +1568,7 @@ real_p_down = p_down
 real_rate = rate
 
 # the parameters that govern the search depth:
-top = 1 # top describes how many of the top solutions to go through
+top = 2 # top describes how many of the top solutions to go through
 p_window = 1
 plambda_window = 0.7 
 
@@ -1535,6 +1600,7 @@ if do_simulation:
             mid=mid, 
             post=post, 
             rate=rate)
+
     print("Simulated genome was:")
     for chrom in simulated_chromosomes:
         print("chrom: " + str(chrom))
@@ -1545,6 +1611,7 @@ if do_simulation:
     for chrom_type in truth_trees:
         print(truth_trees[chrom_type])
 
+    print("the CN simplified trees are:")
     CN_trees = CN_trees_from_truth_trees(truth_trees)
     for chrom_type in CN_trees:
         print(CN_trees[chrom_type])
@@ -1637,7 +1704,7 @@ print(observed_SNV_multiplicities)
 
 if do_search:
     SEARCH_DEPTH = len(searchable_likelihoods)
-    SEARCH_DEPTH = 0
+    #SEARCH_DEPTH = 0
     results = []
     for res in range(SEARCH_DEPTH + 1):
         path = searchable_likelihoods["path"].iloc[res]
