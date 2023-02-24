@@ -7,6 +7,9 @@ import re
 from more_itertools import locate
 import shelve
 import scipy
+import pandas as pd
+import shelve
+from scipy.optimize import minimize_scalar
 
 # precomputed files
 precomputed_file_folder = "/vast/scratch/users/lmcintosh/GD2/GD/"
@@ -48,53 +51,66 @@ lengths = {0:8.18,
 
 # lengths is a dictionary of rate adjustment parameters. 
 # these parameters adjust the rate of how frequently SNVs occur per genome, so that longer chromosomes have a proportionally larger chance of a new SNV
-# lengths is normalised so that the average rate parameter associated with each chromosome is one:
 for chrom_type in lengths:
     lengths[chrom_type] *= 1/100
 
 
-# count paternity takes in a list of simulated chromosomes and returns the number of each paternal type, 
-# if these numbers were sorted they would be major/minor copy numbers
+# count paternity takes in a list of simulated chromosomes and returns the number of a particular paternal type, 
 def count_paternity(chromosomes,paternal):
-    return( len([x for x in chromosomes if paternal == x["paternal"]]) )
+    return( len([x for x in chromosomes if paternal == x["paternal"] and not x["dead"]]) )
 
 
 def simulate_single_with_poisson_timestamps_names(p_up,p_down,pre,mid,post,rate,agnostic=False):
     # this function simulates the evolution of a cancer genome with whole chromosome copy number changes and SNV's
-    # pre, mid and post model the number of epochs / cell cycles that this genome undergoes. 
-    # pre is the number of epochs that occur before the first round of genome doubling, if there is one
+    # pre, mid and post model the number of epochs / cell cycles that this genome undergoes between rounds of GD if they occur
+e   # pre is the number of epochs that occur before the first round of genome doubling, if there is a round of GD
     # mid is the number of epochs that occur after the first round of genome doubling and before the second round of genome doubling
-    #   if there is no first round of genome doubling then mid is set to be -1
+    #   if there is no first round of genome doubling then mid is set to be -1 AND post is also -1
     # post is the number of epochs that occur after the second round of genome doubling
-    #   if there is no second round of genome doubling then post is also -1
+    #   if there is no second round of genome doubling then post is -1
     # rate is the base rate at which SNVs occur per epoch, 
     # this rate is scaled so that each chromosome on average will gain a number of SNVs proportional to its chromosomal length
 
     # SNV_count will count the number of SNVs and also provide a unique number to each new SNV created
     SNV_count = 0
 
-    # set up the initial genome
+    # set up the initial state of the genome
     simulated_chromosomes = {}
     for chrom_type in range(23):
         simulated_chromosomes[chrom_type] = [
                 {
-                    "unique_identifier":chrom_type+x,
-                    "parent":-1,
-                    "epoch_created":-1,
-                    "paternal":x==0,
-                    "SNVs":[]
+                    "unique_identifier" : chrom_type+x, 
+                    # each chromosome gets a completely unique number to identify it in the simulation
+                    "parent" : -1, 
+                    # the value of parent is the the parent chromosomes unique identifier, 
+                    # the root node of each chromosomal tree is specified to be -1
+                    "epoch_created" : -1, 
+                    # the epoch a chromosome is created, i
+                    # both maternal and paternal chromosomes are created "before time" in epoch -1
+                    "paternal" : (x%2 == 0), 
+                    # True if paternal, False if maternal 
+                    "SNVs":[], 
+                    # a list of dicitonaries that describe the SNVs found on the chromosome, 
+                    # a future extension might be to give these SNVs specific locaitons and simulate intra-chromosomal CN changes
+                    "dead": False i
+                    # if the chromosome is lost in the simulation we still need to record it to lineage tracing for the truth tree
                     } for x in (0,23)]
-        # unique identifier is a unique number to each new chromosome created, 
 
     # chrom_count will count the number of chromosomes created throughout the simulation and provide each with a unique identity
     chrom_count = 46
 
     # now simulate forward from the initial state
+
+    # what is the total number of epochs?
+    assert(pre*(pre>=0) + mid*(mid>=0) + post*(post>=0) + (mid>=0) + (post>=0) == pre+mid+post+2)
+
     # for each epoch in the total number of epochs:
     for epoch in range(pre+mid+post+2): 
         # simulate and insert any new SNVs into the genome
         for chrom_type in simulated_chromosomes:
             for chrom in simulated_chromosomes[chrom_type]:
+                if chrom["dead"]:
+                    continue
                 # generate a random number of SNVs proportional to the length of the genome:
                 additional_SNV_count = np.random.poisson(rate * lengths[chrom_type],1)[0]
 
@@ -116,6 +132,8 @@ def simulate_single_with_poisson_timestamps_names(p_up,p_down,pre,mid,post,rate,
             for chrom_type in simulated_chromosomes:
                 new_chromosomes = []
                 for chrom in simulated_chromosomes[chrom_type]:
+                    if chrom["dead"]:
+                        continue
                     # copy each chromosome and record a unique identity and parent for it:
                     # need to deep copy or we can change the old chromosome
                     new_chromosome = copy.deepcopy(chrom) 
@@ -125,6 +143,9 @@ def simulate_single_with_poisson_timestamps_names(p_up,p_down,pre,mid,post,rate,
                     new_chromosome["unique_identifier"] = chrom_count
                     new_chromosome["epoch_created"] = epoch
                     new_chromosome["parent"] = chrom["unique_identifier"]
+                    # deepcopy handles next two lines
+                    #new_chromosome["paternal"] = chrom["paternal"]
+                    #new_chromosome["SNVs"] = []
                     new_chromosomes += [new_chromosome]
 
                 simulated_chromosomes[chrom_type] += new_chromosomes
@@ -133,20 +154,22 @@ def simulate_single_with_poisson_timestamps_names(p_up,p_down,pre,mid,post,rate,
             # this is a standard round of aneuploidy
             for chrom_type in simulated_chromosomes:
                 if agnostic:
+                    continue
+                    # this needs to be fixed to be able to handle lost parental chains
                     # generate simulated chromosomes without consistent probabilities
                     # randomly select a number of chromosomes to lose
                     # randomly select a number of chromosomes to gain after that 
                     # Delete a random number of items from the list
-                    lst = simulated_chromosomes[chrom_type]
-                    for i in range(random.randint(0, len(lst))):
-                        lst.pop(random.randint(0, len(lst) - 1))
+                    #lst = simulated_chromosomes[chrom_type]
+                    #for i in range(random.randint(0, len(lst))):
+                    #    lst.pop(random.randint(0, len(lst) - 1))
         
                      # Add copies of a random number of items from the list back to itself
-                    for i in range(random.randint(0, len(lst))):
-                        item = lst[random.randint(0, len(lst) - 1)]
-                        lst.append(copy.deepcopy(item))
+                    #for i in range(random.randint(0, len(lst))):
+                    #    item = lst[random.randint(0, len(lst) - 1)]
+                    #    lst.append(copy.deepcopy(item))
 
-                    simulated_chromosomes[chrom_type] = lst
+                    #simulated_chromosomes[chrom_type] = lst
 
 
                 else:
@@ -161,6 +184,9 @@ def simulate_single_with_poisson_timestamps_names(p_up,p_down,pre,mid,post,rate,
                             #    gaining another copy of this chromosome with probability p_up,
                             #    nothing happening with probability 1 - p_up - down:
                             change = np.random.choice([1,0,-1], 1, p=[p_up,1-p_up-p_down,p_down])
+                            if chrom["dead"]:
+                                new_chromosomes += [chrom]
+                                continue
 
                             if change == 0:
                                 # keep the old chromosome only
@@ -173,16 +199,21 @@ def simulate_single_with_poisson_timestamps_names(p_up,p_down,pre,mid,post,rate,
                                 new_chromosome["unique_identifier"] = chrom_count
                                 new_chromosome["epoch_created"] = epoch
                                 new_chromosome["parent"] = chrom["unique_identifier"]
+                                # no need to do below two statements because of deepcopy
+                                #new_chromosome["paternal"] = chrom["paternal"]
+                                #new_chromosome["SNVs"] = []
                                 new_chromosomes += [new_chromosome]
                                 # but also keep the old one
                                 new_chromosomes += [chrom]
 
                             elif change == -1: 
                                 # then lose the old chromosome
+                                chrom["dead"] = True
+                                new_chromosomes += [chrom]
                                 continue
 
                         # ensure that there is always at least one copy of every chromosome
-                        if len(new_chromosomes) != 0:
+                        if len([x for x in new_chromosomes if not x["dead"]]) != 0:
                             break 
                    
                     # add those chromosomes into the genome
@@ -209,25 +240,42 @@ def simulate_single_with_poisson_timestamps_names(p_up,p_down,pre,mid,post,rate,
 
 # now make a structure to compare the truth tree to the found tree
 def insert_node_into_truth_tree(tree,node):
-    #print("node")
-    #print("\t"+str(node))
-    #print("tree")
-    #print("\t"+str(tree))
+    print("node")
+    print("\t"+str(node))
+    print("tree")
+    print("\t"+str(tree))
     assert(node["unique_identifier"] != tree["unique_identifier"])
 
     if node["parent"] == tree["unique_identifier"]:
         if tree["child"] == None:
             tree["complement"] = copy.deepcopy(tree)
             tree["complement"]["epoch_created"] = node["epoch_created"]
-            # because tree is already a copoy of itself if should already have child and complement set to None
+            if node["parent"] == -1:
+                tree["complement"]["copy_number"] = 0
+            # because tree is already a copy of itself if should already have child and complement set to None
+            #assert(tree["complement"]["child"] == None)
+            #assert(tree["complement"]["complement"] == None)
 
             tree["child"] = copy.deepcopy(node)
             tree["child"]["child"] = None
             tree["child"]["complement"] = None
 
-        else:
-            tree["complement"] = insert_node_into_truth_tree(tree["complement"],node)
 
+        else:
+            if node["parent"] == -1: # 
+                assert(node["unique_identifier"] < 46)
+                tree["complement"] = copy.deepcopy(node)
+                tree["complement"]["child"] = None
+                tree["complement"]["complement"] = None
+                assert("copy_number" not in  tree["complement"])
+            else:
+                # this is what needs to be fixed i think?
+                if tree["complement"] is None:
+                    tree["complement"] = copy.deepcopy(node)
+                    tree["complement"]["child"] = None
+                    tree["complement"]["complement"] = None
+                else:
+                    tree["complement"] = insert_node_into_truth_tree(tree["complement"],node)
     else:
         # insert it below child or complement (but not at that level)
         if tree["child"] != None:
@@ -245,9 +293,16 @@ def insert_node_into_truth_tree(tree,node):
 
 # create a recursive function to insert the correct copy number at each node in the tree
 def add_copynumber_to_tree(tree):
+    # handle the base case of losing one of the original paternal chromosomes
+    if "copy_number" in tree:
+        return(tree)
+
     if tree["child"] == None:
         assert(tree["complement"] == None)
-        tree["copy_number"] = 1
+        if tree["dead"]:
+            tree["copy_number"] = 0
+        else:
+            tree["copy_number"] = 1
 
     else:
         tree["child"] = add_copynumber_to_tree(tree["child"])
@@ -258,6 +313,9 @@ def add_copynumber_to_tree(tree):
 
 # create a recursive function to find the correct number of SNVs at a particular copy at each node in the tree:
 def add_SNV_multiplicity_to_tree(tree):
+    if tree["copy_number"] == 0:
+        tree["SNV_multiplicity"] = None
+
     if tree["child"] == None:
         assert(tree["complement"] == None)
 
@@ -307,7 +365,7 @@ def create_truth_trees(simulated_chromosomes):
         # create the root node of the tree for this chrom_type
         tree = {'unique_identifier':-1,
                 'parent':None,
-                'epoch_created':None,
+                'epoch_created':-1,
                 'paternal':None,
                 'child':None,
                 'complement':None,
@@ -381,7 +439,7 @@ def CN_trees_from_truth_trees(truth_trees):
 def count_CNs(simulated_chromosomes):
     observed_CNs = {}
     for chrom_type in simulated_chromosomes:
-        observed_CNs[chrom_type] = [len([x for x in simulated_chromosomes[chrom_type] if paternal == x["paternal"]]) for paternal in [True,False]]
+        observed_CNs[chrom_type] = [len([x for x in simulated_chromosomes[chrom_type] if paternal == x["paternal"] and not x["dead"]]) for paternal in [True,False]]
 
     return(observed_CNs)
 
@@ -439,7 +497,6 @@ def CN_multiplicities_to_likelihoods(observed_CN_multiplicities):
     return(named_likelihoods)
 
 
-import pandas as pd
 
 def likelihoods_to_marginal_likelihoods(likelihoods, top, default_paths=[]):
     # Create a copy of the likelihoods DataFrame
@@ -1375,8 +1432,8 @@ def convert_dict_tree_to_list(tree):
 # now write a function with two arguments, the first is a dictionary-like tree data structure in the form {'copy_number': value, 'child': child1, 'complement': child2} called tree and the second is a list of numbers which is as long as the number of nodes in the tree. Add these numbers to the tree like data structure under the key "epoch_created" in a depth first way
 # Here's a function that takes a dictionary-like tree data structure tree and a list of numbers and adds the numbers to the tree data structure under the key 'epoch_created' in a depth-first manner:
 def add_epoch_created(dict_tree, epoch_list):
-    print(dict_tree)
-    print(epoch_list)
+    #print(dict_tree)
+    #print(epoch_list)
     dict_tree['epoch_created'] = epoch_list.pop(0)
 
     if 'child' in dict_tree:
@@ -1394,7 +1451,7 @@ def add_epoch_created(dict_tree, epoch_list):
 # now we write a function that can fully convert to the discovered tree and turn it into the form of the generated tree
 def CN_tree_list_and_epoch_array_to_dictionary_tree(CN_tree,epoch_list):
     dict_tree = convert_to_dict_tree(CN_tree)
-    print(dict_tree)
+    #print(dict_tree)
     epoch_list = list(epoch_list)
     dict_tree = add_epoch_created(dict_tree, epoch_list)
     return dict_tree
@@ -1411,13 +1468,13 @@ def CN_tree_list_and_epoch_array_to_dictionary_tree(CN_tree,epoch_list):
 
 print("START")
 do_simulation = False 
-#do_simulation = True 
+do_simulation = True 
 
 cache_results = False
-#cache_results = True
+cache_results = True
 
 do_search = False
-#do_search = True
+do_search = True
 
 # the parameters that generated the simulation:
 pre = 1
@@ -1425,7 +1482,17 @@ mid = 1
 post = -1
 p_up = 0.13
 p_down = 0.13
-rate = 100 
+rate = 1
+
+print("SIMULATION PARAMETERS ARE: ")
+print("pre: "+ str(pre))
+print("mid: "+ str(mid))
+print("post: " + str(post))
+print("p_up: " + str(p_up))
+print("p_down: " + str(p_down))
+print("rate: " + str(rate))
+print("")
+
 
 # save the true parameters because there are name collisions:
 real_pre = pre
@@ -1436,25 +1503,31 @@ real_p_down = p_down
 real_rate = rate
 
 # the parameters that govern the search depth:
-top = 10
+top = 1 # top describes how many of the top solutions to go through
 p_window = 1
-plambda_window = 0.5 #30
-#plambda_window = float("inf")
+plambda_window = 0.7 
 
-max_default_path_length = 5
+print("SEARCH PARAMETERS ARE: ")
+print("BP search depth: "+ str(top))
+print("additive window width to search around top estimates of enuploidy probabilities: " + str(p_window))
+print("multiplicative window width to search around top estimates of the poisson parameter: " + str(p_window))
+
+
+max_default_path_length = 1
 default_paths = [str(x) for x in range(max_default_path_length)]
 default_paths += [str(x) + "G" + str(y) 
         for x in range(max_default_path_length) 
         for y in range(max_default_path_length) 
         if x+y <= max_default_path_length]
 
-print("default paths")
+print("default paths that will always get searched through")
 print(default_paths)
 print("default path lengths")
 print(len(default_paths))
 
 
 if do_simulation:
+    print("Doing simulation")
     simulated_chromosomes = simulate_single_with_poisson_timestamps_names(
             p_up=p_up, 
             p_down=p_down, 
@@ -1462,7 +1535,12 @@ if do_simulation:
             mid=mid, 
             post=post, 
             rate=rate)
+    print("Simulated genome was:")
+    for chrom in simulated_chromosomes:
+        print("chrom: " + str(chrom))
+        print(simulated_chromosomes[chrom])
 
+    print("the truth trees are:")
     truth_trees = create_truth_trees(simulated_chromosomes)
     for chrom_type in truth_trees:
         print(truth_trees[chrom_type])
@@ -1521,7 +1599,6 @@ if do_simulation:
 
 if not do_simulation:
     # then load the most recently cached result:
-    import shelve
     d = shelve.open('file.txt')
     simulated_chromosomes = d['simulated_chromosomes']
     observed_CNs = d['observed_CNs']
@@ -1614,7 +1691,6 @@ if do_search:
         # put branch lengths here, they are getting passed in to both comput ehte SNV likelihood and the BP likelihoods below
         # should not create the exact same data structure twice
     
-        from scipy.optimize import minimize_scalar
 
         print("SELECT the best estimates")
         total_time = 1
@@ -1628,7 +1704,7 @@ if do_search:
         total_SNVs = sum_SNV_counts(observed_SNV_multiplicities)
         total_chromosomes = sum_chrom_multiplicities(observed_CN_multiplicities)
         plambda_start = total_SNVs / total_time / total_chromosomes * 23
-        print("plambda_start: "+str(plambda_start))  
+        print("plambda_start: " + str(plambda_start))  
         # this is a very rough estimate of expected value but it should align with the optimised for value. 
         # and this should be checked at some point and this line removed once checked
 
@@ -1724,7 +1800,8 @@ for res in sorted(results):
     for chrom in estimated_trees:
         simulated_trees[chrom] = sort_tree_by_copy_number(simulated_trees[chrom])
         estimated_trees[chrom] = sort_tree_by_copy_number(estimated_trees[chrom])
-
+        for i in range(5):
+            print("##### CHROM: " + str(chrom))
         #print("The estimated tree is: " + str(estimated_trees[chrom]))
         #print("The simulated tree is: " + str(simulated_trees[chrom]))
         print("The simulated tree looks like: " + str(convert_dict_tree_to_list(simulated_trees[chrom])))
