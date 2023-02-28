@@ -2,12 +2,8 @@
 
 # finalise code to fully compare the results with the truth.
 	# the chromosome per chromosome functions should be mostly done, just need to write simple functions to average over results.
+	# there is an issue with the timing part of the function, in one tree it is when the chromosome is created, in the other it is when it first had children. 
+	# There is also an offset due to a timing convention differeence
 
 # find a way to record the likelihood contributions from the tree structe with and without the SNVs. 
 # The tree structure and the snvs are jointly dependent so it is not nessecarily meaningful to break this down but it will give an idea as to how the algo is working
-# #
-#
-
-SH i
-
-# FINISH UPDATING THE SEARCH TO ALSO INCLUDE THE peak likelihoods, not just the marginals.# 

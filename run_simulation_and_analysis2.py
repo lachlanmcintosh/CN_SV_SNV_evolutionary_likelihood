@@ -10,6 +10,9 @@ import scipy
 import pandas as pd
 import shelve
 from scipy.optimize import minimize_scalar
+import sys
+
+test_case_number = arguments = sys.argv[1]
 
 # precomputed files
 precomputed_file_folder = "/vast/scratch/users/lmcintosh/GD2/GD/"
@@ -586,7 +589,7 @@ def likelihoods_to_marginal_likelihoods(likelihoods, top, default_paths=[]):
     # Get the best row associated with each path in the default_paths list
     for path in default_paths:
         best_row = marginal_likelihoods.loc[marginal_likelihoods["path"] == path]#.sort_values('likelihood', ascending=False).iloc[0]
-        result = result.append(best_row)
+        result = pd.concat([result,best_row])
 
     # Remove duplicate rows again, in case any of the default paths were already in the top n rows
     result = result.drop_duplicates(subset='path', keep='first')
@@ -599,8 +602,8 @@ def likelihoods_to_marginal_likelihoods(likelihoods, top, default_paths=[]):
     result = result.sort_values(by=['likelihood'], inplace=False, ascending=False)
 
     # Print total likelihood for debugging
-    total = sum(result["likelihood"])
-    print("Total marginal likelihoods sum to normalize: " + str(total))
+    #total = sum(result["likelihood"])
+    #print("Total marginal likelihoods sum to normalize: " + str(total))
 
     # Print the best marginal likelihoods
     #print("Best marginal likelihoods:")
@@ -665,6 +668,8 @@ def simulated_chromosomes_to_SNV_counts(simulated_chromosomes):
             SNV_copy_counter[chrom_type] = {}
 
         for chrom in simulated_chromosomes[chrom_type]:
+            if chrom["dead"]:
+                continue
             for SNV in chrom["SNVs"]:
                 UI = SNV["unique_identifier"]
 
@@ -683,6 +688,7 @@ def simulated_chromosomes_to_SNV_counts(simulated_chromosomes):
 # and use a constant rate modelling assumption to allow for a best tree structure to explain the data
 
 def SNV_counts_to_SNV_multiplicities(SNV_copy_counter):
+    
     multiplicities = {}
     for chrom_number in SNV_copy_counter:
         if chrom_number not in multiplicities:
@@ -772,10 +778,10 @@ def complete_trees(trees):
 def generate_trees(observed_CNs,SNV_CNs):
     SNV_CNs.sort(reverse = True)
     observed_CNs.sort(reverse = True)
-    # print("SNV_CNs")
-    # print(SNV_CNs)
-    # print("observed_CNs")
-    # print(observed_CNs)
+    print("SNV_CNs")
+    print(SNV_CNs)
+    print("observed_CNs")
+    print(observed_CNs)
 
     # initially we start with the following tree for each chromosome:
     trees = [(sum(observed_CNs),(max(observed_CNs),),(min(observed_CNs),))]
@@ -791,6 +797,8 @@ def generate_trees(observed_CNs,SNV_CNs):
         if trees_with_new_node == []:
             # then there isn’t anywhere left to insert the new node into these trees
             # this shouldn’t happen unless this SNV_CN is also in our observed_CNs
+            print(SNV_CN)
+            print(observed_CNs)
             assert(SNV_CN in observed_CNs)
             continue
 
@@ -861,7 +869,12 @@ def get_timings_per_tree(tree,epochs):
     # for a given tree assign labels to it and describe the parental relationships within the tree so that we can 
     # compute the timings of nodes in arrays
 
-    labelled_tree, count, parents, label_to_copy = label_tree(copy.deepcopy(tree),0,{},{})
+    labelled_tree, count, parents, label_to_copy = label_tree(
+            tree=copy.deepcopy(tree),
+            count=0,
+            parents={},
+            label_to_copy={}
+            )
     # labelled_tree simply assigns a unique number to every node in the tree
     # count is the number of nodes in the tree
     # parents is a dictionary that describe the parental relationships between the unique numbers of the nodes in the tree
@@ -878,7 +891,7 @@ def get_timings_per_tree(tree,epochs):
             # then it is the root node and there is no such thing as a timing for the first bifurcation
             # it is simply a natural split due to each person inheriting one of each CN
             timings = np.tile(timings, (1,1)) # this forces a potentially 1d array to be 2d
-            timings[:,label] = 0 
+            timings[:,label] = -1# 0 
 
         elif label_to_copy[str(label)] == 1:
             # then it is a leaf node and we can set it to be 
@@ -932,6 +945,8 @@ def get_timings_per_tree(tree,epochs):
 def get_all_trees_and_timings(observed_SNV_multiplicities, observed_CNs):
     trees_and_timings = {}
     for chrom in observed_SNV_multiplicities:
+        print(chrom)
+
         all_trees = generate_trees( 
             observed_CNs = observed_CNs[chrom],
             SNV_CNs = list(observed_SNV_multiplicities[chrom].keys())
@@ -1486,6 +1501,11 @@ def convert_dict_tree_to_list(tree):
 
     copy_number = tree.get('copy_number')
     epoch_created = tree.get('epoch_created')
+    if tree["child"] is not None:
+        epoch_killed = tree["child"]["epoch_created"]
+    else:
+        epoch_killed = max_epochs
+
     child_tree = convert_dict_tree_to_list(tree.get('child'))
     complement_tree = convert_dict_tree_to_list(tree.get('complement'))
 
@@ -1512,6 +1532,7 @@ def add_epoch_created(dict_tree, epoch_list):
 # The function first adds the first element of numbers to the tree dictionary under the key 'epoch_created' and removes it from numbers.
 # If the 'child' key is present in the tree dictionary, the function recursively calls add_epoch_created on the value of the 'child' key with the updated numbers list. 
 # If the 'complement' key is present, the function performs a similar operation. The final tree with the 'epoch_created' values is returned.
+
 
 # now we write a function that can fully convert to the discovered tree and turn it into the form of the generated tree
 def CN_tree_list_and_epoch_array_to_dictionary_tree(CN_tree,epoch_list):
@@ -1568,9 +1589,9 @@ real_p_down = p_down
 real_rate = rate
 
 # the parameters that govern the search depth:
-top = 2 # top describes how many of the top solutions to go through
-p_window = 1
-plambda_window = 0.7 
+top = 6 # top describes how many of the top solutions to go through
+p_window = 2
+plambda_window = 0.7
 
 print("SEARCH PARAMETERS ARE: ")
 print("BP search depth: "+ str(top))
@@ -1653,9 +1674,11 @@ if do_simulation:
 
     if cache_results:
         # need to save the important datastructures up to hear and then just work onwards from here to speed up development
-        d = shelve.open('file.txt')           
+        d = shelve.open('file_'+str(test_case)+'.txt')           
         # in d is a dictionary type file that you can save variables:
         d['simulated_chromosomes'] = simulated_chromosomes
+        d['truth_trees'] = truth_trees
+        d['CN_trees'] = CN_trees
         d['observed_CNs'] = observed_CNs
         d['observed_CN_multiplicities'] = observed_CN_multiplicities
         d['likelihoods'] = likelihoods
@@ -1666,14 +1689,44 @@ if do_simulation:
 
 if not do_simulation:
     # then load the most recently cached result:
-    d = shelve.open('file.txt')
+    #d = shelve.open('file.txt')
+    d = shelve.open('file_'+str(test_case)+'.txt')           
     simulated_chromosomes = d['simulated_chromosomes']
+    truth_trees = d['truth_trees']
+    CN_trees = d['CN_trees']
     observed_CNs = d['observed_CNs']
     observed_CN_multiplicities = d['observed_CN_multiplicities']
     likelihoods = d['likelihoods']
     marginal_likelihoods = d['marginal_likelihoods']
     top_likelihoods = d['top_likelihoods']
     searchable_likelihoods = d['searchable_likelihoods']
+
+    print("simulated_chromsomes")
+    print(simulated_chromosomes)
+
+    print("truth_trees")
+    print(truth_trees)
+
+    print("CN_trees")
+    print(CN_trees)
+
+    print("observed_CNs")
+    print(observed_CNs)
+
+    print("observed_CN_multiplicities")
+    print(observed_CN_multiplicities)
+    
+    print("likelihoods")
+    print(likelihoods)
+    
+    print("marginal_likelihoods")
+    print(marginal_likelihoods)
+
+    print("top_likelihoods")
+    print(top_likelihoods)
+    
+    print("searchable_likelihoods")
+    print(searchable_likelihoods)
     d.close()
 
 
@@ -1703,6 +1756,9 @@ observed_SNV_multiplicities = count_SNV_multiplicities(simulated_chromosomes)
 print(observed_SNV_multiplicities)
 
 if do_search:
+    print("searchable likelihoods")
+    print(searchable_likelihoods)
+
     SEARCH_DEPTH = len(searchable_likelihoods)
     #SEARCH_DEPTH = 0
     results = []
@@ -1769,9 +1825,16 @@ if do_search:
             total_time += post
 
         total_SNVs = sum_SNV_counts(observed_SNV_multiplicities)
+        print("total SNVs")
+        print(total_SNVs)
+        print("observed_SNV_multiplicities")
+        print(observed_SNV_multiplicities)
+
         total_chromosomes = sum_chrom_multiplicities(observed_CN_multiplicities)
         plambda_start = total_SNVs / total_time / total_chromosomes * 23
         print("plambda_start: " + str(plambda_start))  
+        if plambda_start == 0:
+            sys.exit()
         # this is a very rough estimate of expected value but it should align with the optimised for value. 
         # and this should be checked at some point and this line removed once checked
 
@@ -1794,13 +1857,15 @@ if do_search:
         print(res)
         results += [[best_loglik, pre, mid, post, best_p_up, best_p_down, best_plambda, result]]
 
-        d = shelve.open('file2.txt')
+        #d = shelve.open('file2.txt')
+        d = shelve.open('file2_'+str(test_case)+'.txt')           
         d['results'] = results
         d['trees_and_timings'] = trees_and_timings
         d.close()
 else:
     # load the results array
-    d = shelve.open('file2.txt')
+    #d = shelve.open('file2.txt')
+    d = shelve.open('file2_'+str(test_case)+'.txt')           
     results = d['results']
     trees_and_timings = d['trees_and_timings']
     d.close()
@@ -1818,7 +1883,7 @@ for res in sorted(results):
             p_down = p_down_est
             )
 
-    total,best = find_best_SNV_likelihood(plambda_est,trees_and_timings,BP_likelihoods)
+    total, best = find_best_SNV_likelihood(plambda_est,trees_and_timings,BP_likelihoods)
 
     estimated_trees = {}
     for chrom in best:
@@ -1834,18 +1899,23 @@ for res in sorted(results):
 
         print("CN tree")
         print(CN_tree)
+
         print("labelled tree")
         print(labelled_tree)
+
         print("count")
         print(count)
+
         print("timings")
         print(timings)
+
         print("row_index")
         print(row_index)
-        print(timings[row_index])
+
         print("epoch_list")
         epoch_list = timings[row_index]
         print(epoch_list)
+
         print("parents")
         print(parents)
 

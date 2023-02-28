@@ -9,5 +9,5 @@
 source ~/anaconda3/etc/profile.d/conda.sh
 conda activate sage
 
-python run_simulation_and_analysis2.py 
+python run_simulation_and_analysis2.py $1
 
