@@ -1,9 +1,22 @@
 # this can be used as continually updated TODO list
+# in the simulation code there is an infinite loop somewhere. I think it might be specificially in the fucntino that simulates the genome. It might be the case that it can never satisfy the conditions to get out of the while loop
+# I might have fixed this
+#
+#
 
 # finalise code to fully compare the results with the truth.
 	# the chromosome per chromosome functions should be mostly done, just need to write simple functions to average over results.
 	# there is an issue with the timing part of the function, in one tree it is when the chromosome is created, in the other it is when it first had children. 
 	# There is also an offset due to a timing convention differeence
+	#
 
 # find a way to record the likelihood contributions from the tree structe with and without the SNVs. 
 # The tree structure and the snvs are jointly dependent so it is not nessecarily meaningful to break this down but it will give an idea as to how the algo is working
+#
+# make a threshold so that in the top and marginal funcitons we don't add any paths that are 10x worse than our current best option. only add in default paths that are close enough to be a potential candidate
+#
+# There are clearly some paths that were not included when the paths likelihoods were created. These need to be updated to include the most basic paths like '0', 'G0', '0G', '0G0', etc. 
+# 	check the bounds on the generating function. 
+# 	also need to put that into the correct location on the filesystem 
+# 	also need to find the right location to save that thing
+#

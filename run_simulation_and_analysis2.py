@@ -12,7 +12,7 @@ import shelve
 from scipy.optimize import minimize_scalar
 import sys
 
-test_case_number = arguments = sys.argv[1]
+test_case = sys.argv[1]
 
 # precomputed files
 precomputed_file_folder = "/vast/scratch/users/lmcintosh/GD2/GD/"
@@ -82,7 +82,7 @@ def simulate_single_with_poisson_timestamps_names(p_up,p_down,pre,mid,post,rate,
     for chrom_type in range(23):
         simulated_chromosomes[chrom_type] = [
                 {
-                    "unique_identifier" : chrom_type+x, 
+                    "unique_identifier" : chrom_type + x, 
                     # each chromosome gets a completely unique number to identify it in the simulation
                     "parent" : -1, 
                     # the value of parent is the the parent chromosomes unique identifier, 
@@ -90,7 +90,7 @@ def simulate_single_with_poisson_timestamps_names(p_up,p_down,pre,mid,post,rate,
                     "epoch_created" : -1, 
                     # the epoch a chromosome is created, i
                     # both maternal and paternal chromosomes are created "before time" in epoch -1
-                    "paternal" : (x%2 == 0), 
+                    "paternal" : (x % 2 == 0), 
                     # True if paternal, False if maternal 
                     "SNVs":[], 
                     # a list of dicitonaries that describe the SNVs found on the chromosome, 
@@ -105,6 +105,7 @@ def simulate_single_with_poisson_timestamps_names(p_up,p_down,pre,mid,post,rate,
     # now simulate forward from the initial state
 
     # what is the total number of epochs?
+    # turns out there is a complicated way to add these up and also an easy way:
     assert(pre*(pre>=0) + mid*(mid>=0) + post*(post>=0) + (mid>=0) + (post>=0) == pre+mid+post+2)
 
     # for each epoch in the total number of epochs:
@@ -120,30 +121,23 @@ def simulate_single_with_poisson_timestamps_names(p_up,p_down,pre,mid,post,rate,
 
                 # add these SNVs to the chromosome 
                 for x in range(SNV_count + 1, SNV_count + additional_SNV_count + 1):
-                    chrom["SNVs"] += [{"unique_identifier":str(x), "epoch_created":epoch}] #, "location":location}] A
-                    # location can be added in later to 
+                    chrom["SNVs"] += [{"unique_identifier":str(x), "epoch_created":epoch}] #, "location":location}] 
+                    # location can be added in later too 
 
                 # update the SNV count
                 SNV_count = SNV_count + additional_SNV_count 
 
-##### RE READ THROUGH FROM HERE
-##### RE READ THROUGH FROM HERE
-##### RE READ THROUGH FROM HERE
-##### RE READ THROUGH FROM HERE
-##### RE READ THROUGH FROM HERE
-##### RE READ THROUGH FROM HERE
-
         # if there is a genome doubling it has to be after post, so post cannot equal -1 if mid does
         # enforce this assertion as it may be easy to forget this later on:
-
-        assert( not(mid == -1 and post != -1) ) 
+        if mid == -1:
+            assert(post == -1) 
 
         # simulate the changes in copy number, but keep track of the SNVs
         # first see if this is a genome doubling round or an anueploidy round (they are mutually exclusive)
         if (mid != -1 and epoch == pre) or (post != -1 and epoch == pre+1+mid): 
-            # if this epoch is the epoch of the first round or the second round of genome doubling
+            # that is; if this epoch is the epoch of the first round or the second round of genome doubling
+
             for chrom_type in simulated_chromosomes:
-                new_chromosomes = []
                 for chrom in simulated_chromosomes[chrom_type]:
                     if chrom["dead"]:
                         continue
@@ -154,35 +148,51 @@ def simulate_single_with_poisson_timestamps_names(p_up,p_down,pre,mid,post,rate,
                     # chrom count is the next unique identifier of a chromosome
                     chrom_count += 1 
                     new_chromosome["unique_identifier"] = chrom_count
-                    new_chromosome["epoch_created"] = epoch
+                    new_chromosome["epoch_created"] = epoch 
                     new_chromosome["parent"] = chrom["unique_identifier"]
-                    # deepcopy handles next two lines
-                    #new_chromosome["paternal"] = chrom["paternal"]
-                    #new_chromosome["SNVs"] = []
-                    new_chromosomes += [new_chromosome]
 
-                simulated_chromosomes[chrom_type] += new_chromosomes
+                simulated_chromosomes[chrom_type].append(new_chromosome)
 
         else:
             # this is a standard round of aneuploidy
             for chrom_type in simulated_chromosomes:
                 if agnostic:
-                    continue
-                    # this needs to be fixed to be able to handle lost parental chains
                     # generate simulated chromosomes without consistent probabilities
-                    # randomly select a number of chromosomes to lose
-                    # randomly select a number of chromosomes to gain after that 
-                    # Delete a random number of items from the list
-                    #lst = simulated_chromosomes[chrom_type]
-                    #for i in range(random.randint(0, len(lst))):
-                    #    lst.pop(random.randint(0, len(lst) - 1))
-        
-                     # Add copies of a random number of items from the list back to itself
-                    #for i in range(random.randint(0, len(lst))):
-                    #    item = lst[random.randint(0, len(lst) - 1)]
-                    #    lst.append(copy.deepcopy(item))
 
-                    #simulated_chromosomes[chrom_type] = lst
+                    rnds = random.randint(0,2)
+                    for rnd in range(rnds):
+                        # randomly select a number of chromosomes to lose
+                        lst = simulated_chromosomes[chrom_type] 
+                        for i in range(random.randint(0, len(lst))):
+                            lst[i]["dead"] = True
+                            #lst.pop(random.randint(0, len(lst) - 1))
+            
+                        # randomly select a number of chromosomes to gain after that 
+                        # Add copies of a random number of items from the list back to itself
+                        for i in range(random.randint(0, len(lst))):
+                            item = lst[random.randint(0, len(lst) - 1)]
+                            if not item["dead"]:
+                                new_item = copy.deepcopy(item)
+                                new_item["epoch_created"] = epoch
+                                new_item["parent"] = item["unique_identifier"]
+                                chrom_count += 1
+                                new_item["unique_identifier"] = chrom_count
+                                lst.append(new_item)
+
+                        # now do some GD:
+                        if rnd != rnds:
+                            lst2 = []
+                            for item in lst: 
+                                new_item = copy.deepcopy(item)
+                                new_item["epoch_created"] = epoch
+                                new_item["parent"] = item["unique_identifier"]
+                                chrom_count += 1
+                                new_item["unique_identifier"] = chrom_count
+                                lst2.append(new_item)
+                            lst += lst2
+                        
+                        # update the list of chromosomes
+                        simulated_chromosomes[chrom_type] = lst
 
 
                 else:
@@ -220,9 +230,13 @@ def simulate_single_with_poisson_timestamps_names(p_up,p_down,pre,mid,post,rate,
                                 new_chromosomes += [chrom]
 
                             elif change == -1: 
-                                # then lose the old chromosome
+                                # then lose the old chromosome 
+                                # if losing this chromosome means that it puts the while loop into an infinite loop then restart:
+                                if len([x for x in new_chromosomes if not x["dead"] and x != chrom]) == 0:
+                                    continue
                                 chrom["dead"] = True
                                 new_chromosomes += [chrom]
+
                                 continue
 
                         # ensure that there is always at least one copy of every chromosome
@@ -407,9 +421,6 @@ def remove_dead_nodes(tree):
 # The code checks if the parent of a dead node is equal to "-1" before removing it. If the parent is "-1", then the node is not removed and the function moves on to its children.
 
 
-
-
-
 def create_truth_trees(simulated_chromosomes):
     #there is a tree fro every chromosome
     trees = {}
@@ -566,7 +577,7 @@ def CN_multiplicities_to_likelihoods(observed_CN_multiplicities):
 
 
 
-def likelihoods_to_marginal_likelihoods(likelihoods, top, default_paths=[]):
+def likelihoods_to_marginal_likelihoods(likelihoods, top, default_paths):
     # Create a copy of the likelihoods DataFrame
     marginal_likelihoods = likelihoods.copy()
 
@@ -577,19 +588,27 @@ def likelihoods_to_marginal_likelihoods(likelihoods, top, default_paths=[]):
     # Group by path and sum likelihoods and mean probabilities
     marginal_likelihoods = marginal_likelihoods.groupby(["path"], as_index=False)[['likelihood','mean_p_up','mean_p_down']].sum()
 
-    # Remove rows with zero likelihood
-    # marginal_likelihoods = marginal_likelihoods[marginal_likelihoods["likelihood"] != 0]
-
-    # Remove duplicate rows
-    marginal_likelihoods = marginal_likelihoods.drop_duplicates(subset='path', keep='first')
-
     # Take the top n rows by likelihood value
+    marginal_likelihoods = marginal_likelihoods.sort_values(by=['likelihood'], inplace=False, ascending=False)
     result = marginal_likelihoods.head(top)
+
+    print("inside likelihoods to marginal likelihoods")
+    print("marginal likelihoods")
+    print(marginal_likelihoods)
+    print("result")
+    print(result)
 
     # Get the best row associated with each path in the default_paths list
     for path in default_paths:
+        print("in marginals")
+        print("path")
+        print(path)
         best_row = marginal_likelihoods.loc[marginal_likelihoods["path"] == path]#.sort_values('likelihood', ascending=False).iloc[0]
+        print("best_row")
+        print(best_row)
         result = pd.concat([result,best_row])
+        print("result")
+        print(result)
 
     # Remove duplicate rows again, in case any of the default paths were already in the top n rows
     result = result.drop_duplicates(subset='path', keep='first')
@@ -601,16 +620,6 @@ def likelihoods_to_marginal_likelihoods(likelihoods, top, default_paths=[]):
     # Sort the result DataFrame by likelihood in descending order
     result = result.sort_values(by=['likelihood'], inplace=False, ascending=False)
 
-    # Print total likelihood for debugging
-    #total = sum(result["likelihood"])
-    #print("Total marginal likelihoods sum to normalize: " + str(total))
-
-    # Print the best marginal likelihoods
-    #print("Best marginal likelihoods:")
-    #print(result[:][0:20].to_string())
-
-    result = result[result["likelihood"] != 0]
-
     result["p_up"] = round(result["mean_p_up"])
     result["p_down"] = round(result["mean_p_down"])
 
@@ -620,7 +629,7 @@ def likelihoods_to_marginal_likelihoods(likelihoods, top, default_paths=[]):
     return result
 
 
-def likelihoods_to_best_likelihood_by_path(likelihoods, top, default_paths=[]):
+def likelihoods_to_best_likelihood_by_path(likelihoods, top, default_paths):
     # Create a copy of the likelihoods DataFrame
     df = likelihoods.copy()
 
@@ -630,25 +639,28 @@ def likelihoods_to_best_likelihood_by_path(likelihoods, top, default_paths=[]):
     # Remove duplicate rows
     df = df.drop_duplicates(subset='path', keep='first')
 
-    # Remove rows with zero likelihood
-    #df = df[df["likelihood"] != 0]
-
     # Take the top n rows by likelihood value
     result = df.head(top)
-
+    for i in range(5):
+        print('inside top lieklihoods')
     # Get the best row associated with each path in the default_paths list
     for path in default_paths:
-        best_row = df.loc[df["path"] == path].sort_values('likelihood', ascending=False).iloc[0]
-        result = result.append(best_row)
+        print("in tops")
+        print("path")
+        print(path)
+        print("result")
+        print(result)
+        print("best_row")
+        path_rows = df.loc[df["path"] == path]
+        best_row = path_rows.loc[path_rows['likelihood'].idxmax()].to_frame().T
+        print("best_row")
+        result = pd.concat([result,best_row])
 
     # Remove duplicate rows again, in case any of the default paths were already in the top n rows
     result = result.drop_duplicates(subset='path', keep='first')
 
     # Sort the result DataFrame by likelihood in descending order
     result = result.sort_values('likelihood', ascending=False)
-
-    # Remove rows with zero likelihood
-    result = result[ result["likelihood"] != 0 ]
 
     # Return the result DataFrame
     return result
@@ -953,6 +965,7 @@ def get_all_trees_and_timings(observed_SNV_multiplicities, observed_CNs):
                 )
 
         epochs = pre*(pre>0) + mid*(mid>0) + post*(post>0) + (mid>=0) + (post>=0)
+        assert(epochs == pre+mid+post+2)
 
         trees_and_timings[chrom] = [get_timings_per_tree(x,epochs) for x in all_trees]
         trees_and_timings[chrom] = [x for x in trees_and_timings[chrom] if not None in x[3]]
@@ -1276,8 +1289,8 @@ def find_BP_and_SNV_loglik(plambda_start, p_up_start, p_down_start, trees_and_ti
     #print(p_down_start)
     #print(window)
 
-    for p_up in range(p_up_start - p_window, p_up_start + p_window + 1):
-        for p_down in range(p_down_start - p_window, p_down_start + p_window + 1):
+    for p_up in range(max(0,p_up_start - p_window), min(100,p_up_start + p_window + 1)):
+        for p_down in range(max(0,p_down_start - p_window), min(100,p_down_start + p_window + 1)):
             def optimize_func(plambda):
                 return BP_and_SNV_loglik(plambda, p_up, p_down, trees_and_timings, pre, mid, post)
 
@@ -1564,7 +1577,7 @@ do_search = True
 
 # the parameters that generated the simulation:
 pre = 1
-mid = 1
+mid = -1 
 post = -1
 p_up = 0.13
 p_down = 0.13
@@ -1589,8 +1602,8 @@ real_p_down = p_down
 real_rate = rate
 
 # the parameters that govern the search depth:
-top = 6 # top describes how many of the top solutions to go through
-p_window = 2
+top = 3 # top describes how many of the top solutions to go through
+p_window = 1
 plambda_window = 0.7
 
 print("SEARCH PARAMETERS ARE: ")
@@ -1599,7 +1612,7 @@ print("additive window width to search around top estimates of enuploidy probabi
 print("multiplicative window width to search around top estimates of the poisson parameter: " + str(p_window))
 
 
-max_default_path_length = 1
+max_default_path_length = 2
 default_paths = [str(x) for x in range(max_default_path_length)]
 default_paths += [str(x) + "G" + str(y) 
         for x in range(max_default_path_length) 
@@ -1666,7 +1679,13 @@ if do_simulation:
 
     print(top_likelihoods)
 
+
+    marginal_likelihoods = marginal_likelihoods.reindex(columns=top_likelihoods.columns)
     searchable_likelihoods = pd.concat([top_likelihoods,marginal_likelihoods], ignore_index=True)
+    searchable_likelihoods = searchable_likelihoods.drop_duplicates(subset=['path','p_up','p_down'], keep='first')
+    searchable_likelihoods = searchable_likelihoods.sort_values(by='path')
+    searchable_likelihoods = searchable_likelihoods[searchable_likelihoods['likelihood'] > 1e-9]
+
     print("The best likelihoods are:")
     print(searchable_likelihoods)
     print("paths to search: "+str(len(searchable_likelihoods.index)))
@@ -1764,8 +1783,8 @@ if do_search:
     results = []
     for res in range(SEARCH_DEPTH + 1):
         path = searchable_likelihoods["path"].iloc[res]
-        p_up = int(searchable_likelihoods['p_up'].iloc[res].round())
-        p_down = int(searchable_likelihoods['p_down'].iloc[res].round())
+        p_up = int(searchable_likelihoods['p_up'].iloc[res])
+        p_down = int(searchable_likelihoods['p_down'].iloc[res])
         pre, mid, post = path_code_to_pre_mid_post(path)
 
         print("path: "+str(path))
@@ -1923,6 +1942,12 @@ for res in sorted(results):
         print(estimated_tree)
         estimated_trees[chrom] = estimated_tree
 
+        # epoch_created in each tree in 'estimated_trees' is actually the bifurcation times to create the next node. 
+        # to be able to accurately compare the timing structre of estimated and true cancer trees we need to change one of these
+        # epoch_created in the truth trees is actually the real time that the chromosome was created. 
+        # In the estimated trees, the time the parent bifurcates is the time that the tree was actually created. 
+
+        estimated_trees[chrom]
         
 
     # now compare the results to the truth!
@@ -1933,7 +1958,8 @@ for res in sorted(results):
     # also need a way to annotate the estimated tree with estimated number of SNVs under each branch of the tree.
     # being able to estimate the individual timing of each SNV will be very valuable
 
-    simulated_trees = create_truth_trees(simulated_chromosomes)
+    #simulated_trees = create_truth_trees(simulated_chromosomes)
+    simulated_trees = truth_trees
     for chrom in estimated_trees:
         simulated_trees[chrom] = sort_tree_by_copy_number(simulated_trees[chrom])
         estimated_trees[chrom] = sort_tree_by_copy_number(estimated_trees[chrom])
