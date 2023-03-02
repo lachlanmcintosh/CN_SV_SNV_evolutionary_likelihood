@@ -12,7 +12,40 @@ import shelve
 from scipy.optimize import minimize_scalar
 import sys
 
-test_case = sys.argv[1]
+
+##### STEP 0; check the health of this program, many potentially unused functions are being ddeveloped here
+import ast
+# with the help of chatgpt3, here is a funciton that can identify unused functions:
+def find_unused_functions(source_code):
+    # Parse the source code into an abstract syntax tree
+    tree = ast.parse(source_code)
+
+    # Create a set to store the names of all defined functions
+    defined_functions = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.FunctionDef):
+            defined_functions.add(node.name)
+
+    # Create a set to store the names of all called functions
+    called_functions = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call):
+            if isinstance(node.func, ast.Name):
+                called_functions.add(node.func.id)
+            elif isinstance(node.func, ast.Attribute):
+                called_functions.add(node.func.attr)
+
+    # Return the set difference between defined and called functions
+    return defined_functions - called_functions
+
+with open("run_simulation_and_analysis2.py") as f:
+    source_code = f.read()
+unused_functions = find_unused_functions(source_code)
+print("Unused functions:", unused_functions)
+# This function first parses the source code of the Python program into an abstract syntax tree (AST). 
+# It then walks through the AST to identify all defined functions and all called functions. 
+# Finally, it computes the set difference between the defined and called functions to find the functions that are defined but not used.
+
 
 # precomputed files
 precomputed_file_folder = "/vast/scratch/users/lmcintosh/GD2/GD/"
@@ -62,6 +95,15 @@ for chrom_type in lengths:
 def count_paternity(chromosomes,paternal):
     return( len([x for x in chromosomes if paternal == x["paternal"] and not x["dead"]]) )
 
+def check_all_chrs_are_unique(simulated_chromosomes):
+    ids = [chrom["unique_id"] for chrom in simulated_chromosomes]
+    return len(ids) == len(set(ids))
+
+def check_expected_keys_in_simulated_chromosomes_present(simulated_chromosomes):
+    for chrom in simulated_chromosomes:
+        if not sorted(["SNVs","paternal","epoch_created","parent","unique_identifier"]) == sorted(simulated_chromosomes[chrom].keys()):
+            return False
+    return True
 
 def simulate_single_with_poisson_timestamps_names(p_up,p_down,pre,mid,post,rate,agnostic=False):
     # this function simulates the evolution of a cancer genome with whole chromosome copy number changes and SNV's
@@ -110,6 +152,7 @@ def simulate_single_with_poisson_timestamps_names(p_up,p_down,pre,mid,post,rate,
 
     # for each epoch in the total number of epochs:
     for epoch in range(pre+mid+post+2): 
+        # SIMULATE SNVs
         # simulate and insert any new SNVs into the genome
         for chrom_type in simulated_chromosomes:
             for chrom in simulated_chromosomes[chrom_type]:
@@ -132,6 +175,7 @@ def simulate_single_with_poisson_timestamps_names(p_up,p_down,pre,mid,post,rate,
         if mid == -1:
             assert(post == -1) 
 
+        # SIMULATE GD
         # simulate the changes in copy number, but keep track of the SNVs
         # first see if this is a genome doubling round or an anueploidy round (they are mutually exclusive)
         if (mid != -1 and epoch == pre) or (post != -1 and epoch == pre+1+mid): 
@@ -159,40 +203,40 @@ def simulate_single_with_poisson_timestamps_names(p_up,p_down,pre,mid,post,rate,
                 if agnostic:
                     # generate simulated chromosomes without consistent probabilities
 
-                    rnds = random.randint(0,2)
+                    rnds = random.randint(0,3)
                     for rnd in range(rnds):
                         # randomly select a number of chromosomes to lose
-                        lst = simulated_chromosomes[chrom_type] 
-                        for i in range(random.randint(0, len(lst))):
-                            lst[i]["dead"] = True
-                            #lst.pop(random.randint(0, len(lst) - 1))
+                        chroms = simulated_chromosomes[chrom_type] 
+
+                        for which in random.sample(range(len(chroms)), random.randint(0,len(chroms))):
+                            chroms[which]["dead"] = True
             
                         # randomly select a number of chromosomes to gain after that 
                         # Add copies of a random number of items from the list back to itself
-                        for i in range(random.randint(0, len(lst))):
-                            item = lst[random.randint(0, len(lst) - 1)]
-                            if not item["dead"]:
-                                new_item = copy.deepcopy(item)
-                                new_item["epoch_created"] = epoch
-                                new_item["parent"] = item["unique_identifier"]
+                        for which in random.choices(range(len(chrom)), k=random.randint(0,len(chroms))):
+                            if not chroms[which]["dead"]:
+                                new_chrom = copy.deepcopy(chroms[which])
+                                new_chrom["epoch_created"] = epoch
+                                new_chrom["parent"] = chroms[which]["unique_identifier"]
                                 chrom_count += 1
-                                new_item["unique_identifier"] = chrom_count
-                                lst.append(new_item)
+                                new_chrom["unique_identifier"] = chrom_count
+                                chroms.append(new_chrom)
 
                         # now do some GD:
-                        if rnd != rnds:
-                            lst2 = []
-                            for item in lst: 
-                                new_item = copy.deepcopy(item)
-                                new_item["epoch_created"] = epoch
-                                new_item["parent"] = item["unique_identifier"]
+                        # we only want 0 1 or 2 rounds of GD, so:
+                        if rnd != rnds: 
+                            new_chroms = []
+                            for chrom in chroms: 
+                                new_chrom = copy.deepcopy(chrom)
+                                new_chrom["epoch_created"] = epoch
+                                new_chrom["parent"] = chrom["unique_identifier"]
                                 chrom_count += 1
-                                new_item["unique_identifier"] = chrom_count
-                                lst2.append(new_item)
-                            lst += lst2
+                                new_chrom["unique_identifier"] = chrom_count
+                                new_chroms.append(new_chrom)
+                            chroms += new_chroms
                         
                         # update the list of chromosomes
-                        simulated_chromosomes[chrom_type] = lst
+                        simulated_chromosomes[chrom_type] = chroms
 
 
                 else:
@@ -222,22 +266,15 @@ def simulate_single_with_poisson_timestamps_names(p_up,p_down,pre,mid,post,rate,
                                 new_chromosome["unique_identifier"] = chrom_count
                                 new_chromosome["epoch_created"] = epoch
                                 new_chromosome["parent"] = chrom["unique_identifier"]
-                                # no need to do below two statements because of deepcopy
-                                #new_chromosome["paternal"] = chrom["paternal"]
-                                #new_chromosome["SNVs"] = []
                                 new_chromosomes += [new_chromosome]
                                 # but also keep the old one
                                 new_chromosomes += [chrom]
 
                             elif change == -1: 
                                 # then lose the old chromosome 
-                                # if losing this chromosome means that it puts the while loop into an infinite loop then restart:
-                                if len([x for x in new_chromosomes if not x["dead"] and x != chrom]) == 0:
-                                    continue
-                                chrom["dead"] = True
-                                new_chromosomes += [chrom]
-
-                                continue
+                                new_chromosome = copy.deepcopy(chrom)
+                                new_chromociome["dead"] = True
+                                new_chromosomes += [new_chromosome]
 
                         # ensure that there is always at least one copy of every chromosome
                         if len([x for x in new_chromosomes if not x["dead"]]) != 0:
@@ -255,6 +292,10 @@ def simulate_single_with_poisson_timestamps_names(p_up,p_down,pre,mid,post,rate,
 
     for chrom_type in simulated_chromosomes:
         assert(len(simulated_chromosomes) != 0)
+
+    # some basic checks about the simulated chromosomes:
+    assert(check_all_chrs_are_unique(simulated_chromosomes))
+    assert(check_expected_keys_in_simulated_chromosomes_present(simulated_chromosomes))
 
     return(simulated_chromosomes)
 
@@ -1566,11 +1607,12 @@ def CN_tree_list_and_epoch_array_to_dictionary_tree(CN_tree,epoch_list):
 ##### 
 
 print("START")
+test_case = 1 #sys.argv[1]
 do_simulation = False 
-do_simulation = True 
+#do_simulation = True 
 
 cache_results = False
-cache_results = True
+#cache_results = True
 
 do_search = False
 do_search = True
