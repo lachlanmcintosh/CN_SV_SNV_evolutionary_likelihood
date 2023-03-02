@@ -12,6 +12,10 @@ import shelve
 from scipy.optimize import minimize_scalar
 import sys
 
+# import some libraries to keep track of how much computational time is being used in each function:
+import cProfile
+import pstats
+
 
 ##### STEP 0; check the health of this program, many potentially unused functions are being ddeveloped here
 import ast
@@ -46,6 +50,41 @@ print("Unused functions:", unused_functions)
 # It then walks through the AST to identify all defined functions and all called functions. 
 # Finally, it computes the set difference between the defined and called functions to find the functions that are defined but not used.
 
+
+# also with the help of chatgpt, here is a function to generate code to add cProfile statements for all functions in a given Python program
+def generate_cprofile_code(source_code):
+    # Parse the source code into an abstract syntax tree
+    tree = ast.parse(source_code)
+
+    # Create a list to store the generated code
+    generated_code = []
+
+    # Generate code to import the cProfile module
+    generated_code.append('import cProfile')
+
+    # Generate code to define a decorator function for profiling
+    generated_code.append('def profile(func):')
+    generated_code.append('    def wrapper():')
+    generated_code.append('        cProfile.runctx("func()", globals(), locals())')
+    generated_code.append('    return wrapper')
+
+    # Generate code to decorate each function with the profiling decorator
+    for node in ast.walk(tree):
+        if isinstance(node, ast.FunctionDef):
+            function_name = node.name
+            decorator = '@profile'
+            generated_code.append(f'@profile')
+            generated_code.append(f'def {function_name}():')
+            for line in node.body:
+                generated_code.append(f'    {ast.unparse(line).strip()}')
+
+    # Return the generated code as a string
+    return '\n'.join(generated_code)
+
+with open("run_simulation_and_analysis2.py") as f:
+    source_code = f.read()
+generated_code = generate_cprofile_code(source_code)
+print(generated_code)
 
 # precomputed files
 precomputed_file_folder = "/vast/scratch/users/lmcintosh/GD2/GD/"
@@ -2034,4 +2073,11 @@ for res in sorted(results):
 # need to fix this to be able to estimate how well we are doing at tree similarity.
 
 
+if __name__ == '__main__':
+    # profile the entire program
+    cProfile.run('main()', 'my_program_stats')
 
+    # print the profiling results
+    stats = pstats.Stats('my_program_stats')
+    stats.sort_stats('tottime')
+    stats.print_stats()
