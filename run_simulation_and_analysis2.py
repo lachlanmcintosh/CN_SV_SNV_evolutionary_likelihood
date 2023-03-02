@@ -51,41 +51,6 @@ print("Unused functions:", unused_functions)
 # Finally, it computes the set difference between the defined and called functions to find the functions that are defined but not used.
 
 
-# also with the help of chatgpt, here is a function to generate code to add cProfile statements for all functions in a given Python program
-def generate_cprofile_code(source_code):
-    # Parse the source code into an abstract syntax tree
-    tree = ast.parse(source_code)
-
-    # Create a list to store the generated code
-    generated_code = []
-
-    # Generate code to import the cProfile module
-    generated_code.append('import cProfile')
-
-    # Generate code to define a decorator function for profiling
-    generated_code.append('def profile(func):')
-    generated_code.append('    def wrapper():')
-    generated_code.append('        cProfile.runctx("func()", globals(), locals())')
-    generated_code.append('    return wrapper')
-
-    # Generate code to decorate each function with the profiling decorator
-    for node in ast.walk(tree):
-        if isinstance(node, ast.FunctionDef):
-            function_name = node.name
-            decorator = '@profile'
-            generated_code.append(f'@profile')
-            generated_code.append(f'def {function_name}():')
-            for line in node.body:
-                generated_code.append(f'    {ast.unparse(line).strip()}')
-
-    # Return the generated code as a string
-    return '\n'.join(generated_code)
-
-with open("run_simulation_and_analysis2.py") as f:
-    source_code = f.read()
-generated_code = generate_cprofile_code(source_code)
-print(generated_code)
-
 # precomputed files
 precomputed_file_folder = "/vast/scratch/users/lmcintosh/GD2/GD/"
 
@@ -131,19 +96,23 @@ for chrom_type in lengths:
 
 
 # count paternity takes in a list of simulated chromosomes and returns the number of a particular paternal type, 
+@profile
 def count_paternity(chromosomes,paternal):
     return( len([x for x in chromosomes if paternal == x["paternal"] and not x["dead"]]) )
 
+@profile
 def check_all_chrs_are_unique(simulated_chromosomes):
     ids = [chrom["unique_id"] for chrom in simulated_chromosomes]
     return len(ids) == len(set(ids))
 
+@profile
 def check_expected_keys_in_simulated_chromosomes_present(simulated_chromosomes):
     for chrom in simulated_chromosomes:
         if not sorted(["SNVs","paternal","epoch_created","parent","unique_identifier"]) == sorted(simulated_chromosomes[chrom].keys()):
             return False
     return True
 
+@profile
 def simulate_single_with_poisson_timestamps_names(p_up,p_down,pre,mid,post,rate,agnostic=False):
     # this function simulates the evolution of a cancer genome with whole chromosome copy number changes and SNV's
     # pre, mid and post model the number of epochs / cell cycles that this genome undergoes between rounds of GD if they occur
@@ -346,6 +315,7 @@ def simulate_single_with_poisson_timestamps_names(p_up,p_down,pre,mid,post,rate,
 #####
 
 # now make a structure to compare the truth tree to the found tree
+@profile
 def insert_node_into_truth_tree(tree,node):
     print("node")
     print("\t"+str(node))
@@ -399,6 +369,7 @@ def insert_node_into_truth_tree(tree,node):
 #   count the copynumber of each node and how many unique SNVs there are at that copy number.
 
 # create a recursive function to insert the correct copy number at each node in the tree
+@profile
 def add_copynumber_to_tree(tree):
     # handle the base case of losing one of the original paternal chromosomes
     if "copy_number" in tree:
@@ -419,6 +390,7 @@ def add_copynumber_to_tree(tree):
     return(tree)
 
 # create a recursive function to find the correct number of SNVs at a particular copy at each node in the tree:
+@profile
 def add_SNV_multiplicity_to_tree(tree):
     if tree["copy_number"] == 0:
         tree["SNV_multiplicity"] = None
@@ -451,7 +423,7 @@ def add_SNV_multiplicity_to_tree(tree):
 
     return(tree)
 
-
+@profile
 def remove_SNVs_from_tree(tree):
     tree.pop("SNVs")
 
@@ -464,6 +436,7 @@ def remove_SNVs_from_tree(tree):
 
 
 # code to remove all dead nodes in the tree while also updating the parent field of the removed node's children to the parent of the removed node:
+@profile
 def remove_dead_nodes(tree):
     if tree is None:
         return None
@@ -500,7 +473,7 @@ def remove_dead_nodes(tree):
 # If the current node is not dead, the function recursively removes the dead nodes from its children and returns the updated tree.
 # The code checks if the parent of a dead node is equal to "-1" before removing it. If the parent is "-1", then the node is not removed and the function moves on to its children.
 
-
+@profile
 def create_truth_trees(simulated_chromosomes):
     #there is a tree fro every chromosome
     trees = {}
@@ -545,7 +518,7 @@ def create_truth_trees(simulated_chromosomes):
 
     return(trees)
 
-
+@profile
 def CN_tree_from_truth_tree(truth_tree):
 
     if truth_tree["child"] != None and truth_tree["complement"] != None:
@@ -568,7 +541,7 @@ def CN_tree_from_truth_tree(truth_tree):
 
 
 
-
+@profile
 def make_left_heavy(tree):
 
     if len(tree) == 1:
@@ -579,7 +552,7 @@ def make_left_heavy(tree):
         else:
             return([tree[0],make_left_heavy(tree[1]),make_left_heavy(tree[2])])
 
-
+@profile
 def CN_trees_from_truth_trees(truth_trees):
     for chrom_type in truth_trees:
         truth_trees[chrom_type] = CN_tree_from_truth_tree(truth_trees[chrom_type])
@@ -595,6 +568,7 @@ def CN_trees_from_truth_trees(truth_trees):
 #####
 
 # count the number of each parental specific copy number found in the genome
+@profile
 def count_CNs(simulated_chromosomes):
     observed_CNs = {}
     for chrom_type in simulated_chromosomes:
@@ -602,6 +576,7 @@ def count_CNs(simulated_chromosomes):
 
     return(observed_CNs)
 
+@profile
 def count_CN_multiplicities(observed_CNs):
     multiplicities = {}
     
@@ -617,6 +592,7 @@ def count_CN_multiplicities(observed_CNs):
 
 # for every copy number sum the precomputed values weighted against their multiplicity
 # then adjust for CN’s not being able to go to zero
+@profile
 def CN_multiplicities_to_likelihoods(observed_CN_multiplicities):
     # these relative references will need to be modified before publishing 
     def CN_filename(CN):
@@ -657,6 +633,7 @@ def CN_multiplicities_to_likelihoods(observed_CN_multiplicities):
 
 
 
+@profile
 def likelihoods_to_marginal_likelihoods(likelihoods, top, default_paths):
     # Create a copy of the likelihoods DataFrame
     marginal_likelihoods = likelihoods.copy()
@@ -709,6 +686,7 @@ def likelihoods_to_marginal_likelihoods(likelihoods, top, default_paths):
     return result
 
 
+@profile
 def likelihoods_to_best_likelihood_by_path(likelihoods, top, default_paths):
     # Create a copy of the likelihoods DataFrame
     df = likelihoods.copy()
@@ -753,6 +731,7 @@ def likelihoods_to_best_likelihood_by_path(likelihoods, top, default_paths):
 ######
 
 # first count the copy number of each SNV:
+@profile
 def simulated_chromosomes_to_SNV_counts(simulated_chromosomes):
     SNV_copy_counter = {}
     for chrom_type in simulated_chromosomes:
@@ -797,6 +776,7 @@ def SNV_counts_to_SNV_multiplicities(SNV_copy_counter):
 
     return(multiplicities)
 
+@profile
 def count_SNV_multiplicities(simulated_chromosomes):
     return(SNV_counts_to_SNV_multiplicities(simulated_chromosomes_to_SNV_counts(simulated_chromosomes)))
 
@@ -819,6 +799,7 @@ def count_SNV_multiplicities(simulated_chromosomes):
 
 # given a collection of binary trees and a value of ‘CN’ to be inserted into these binary trees, 
 # insert a node of value CN once into every possible location for each tree and return that list of all the created trees:
+@profile
 def insert_node(trees, CN):
     # new_trees will be a list of trees where each tree from ‘trees’ had a value of ‘CN’ inserted once somewhere within it
     new_trees = []
@@ -845,6 +826,7 @@ def insert_node(trees, CN):
 
 # for a given tree made up of the observed SNV’s excluding copy number 1, 
 # insert 1’s everywhere until 1’s are all the leaf nodes and “completed”:
+@profile
 def complete_tree(tree):
 
     if len(tree) == 3:
@@ -862,11 +844,13 @@ def complete_tree(tree):
     return None
 
 
+@profile
 def complete_trees(trees):
     return([complete_tree(tree) for tree in trees])
 
 
 # from the multiplicity counts of the chromosomes and the SNVs generate all the possible trees of every copy number:
+@profile
 def generate_trees(observed_CNs,SNV_CNs):
     SNV_CNs.sort(reverse = True)
     observed_CNs.sort(reverse = True)
@@ -928,6 +912,7 @@ def generate_trees(observed_CNs,SNV_CNs):
 ##### 
 
 
+@profile
 def label_tree(tree, count, parents, label_to_copy):
 
     # change the numbers to labels "in place"
@@ -957,6 +942,7 @@ def label_tree(tree, count, parents, label_to_copy):
     return((tree, count, parents, label_to_copy))
 
 
+@profile
 def get_timings_per_tree(tree,epochs):
     # for a given tree assign labels to it and describe the parental relationships within the tree so that we can 
     # compute the timings of nodes in arrays
@@ -1034,6 +1020,7 @@ def get_timings_per_tree(tree,epochs):
     return((tree, labelled_tree, count, timings, parents))
 
 
+@profile
 def get_all_trees_and_timings(observed_SNV_multiplicities, observed_CNs):
     trees_and_timings = {}
     for chrom in observed_SNV_multiplicities:
@@ -1070,6 +1057,7 @@ def get_all_trees_and_timings(observed_SNV_multiplicities, observed_CNs):
 ##### 
 
 # this function will find the indices of the item_to_find in the list_to_check:
+@profile
 def find_indices(list_to_check, item_to_find):
     indices = locate(list_to_check, lambda x: x == item_to_find)
     return list(indices)
@@ -1077,6 +1065,7 @@ def find_indices(list_to_check, item_to_find):
 
 # from the perspective of calculating the SNV likelihoods we care about how long it took for branches to bifurcate.
 # we can obtain these branch_lengths from get_branch_lengths
+@profile
 def get_branch_lengths(timings):
     tree, labelled_tree, count, timing_array, parents = timings
 
@@ -1115,8 +1104,7 @@ def get_branch_lengths(timings):
 ##### 
 ##### 
 ##### 
-
-
+@profile
 def get_path_code(code_list):
     output = ""
     count = 0
@@ -1131,6 +1119,7 @@ def get_path_code(code_list):
     return(output)
 
 
+@profile
 def timing_struct_to_BP_likelihood_per_chrom(data, trees_and_timings, pre, mid, post):
 
     all_BP_likelihoods = []
@@ -1212,6 +1201,7 @@ def timing_struct_to_BP_likelihood_per_chrom(data, trees_and_timings, pre, mid, 
     return(all_BP_likelihoods)
 
 
+@profile
 def get_BP_likelihoods(trees_and_timings,pre,mid,post,p_up,p_down):
     file = precomputed_file_folder + \
         "/precomputed/store_pre_pickle/pre_mat129_u"+str(int(p_up))+ \
@@ -1237,6 +1227,7 @@ def get_BP_likelihoods(trees_and_timings,pre,mid,post,p_up,p_down):
 ##### 
 
 
+@profile
 def get_poisson_loglikelihood(counts,stacked_branch_lengths,plambda,chrom,to_delete):
     A = np.log(stacked_branch_lengths.astype(float) * plambda * lengths[chrom]) * counts
     B = -np.tile( [scipy.special.gammaln(x+1) for x in counts], (stacked_branch_lengths.shape[0],1))
@@ -1261,6 +1252,7 @@ def get_poisson_loglikelihood(counts,stacked_branch_lengths,plambda,chrom,to_del
     return(total)
 
 
+@profile
 def get_all_poisson_loglikelihoods_per_chr(timings,plambda,BP_likelihoods,observed_SNV_multiplicities,chrom): # these "timings" are on a per chromosome basis
     SNV_likelihoods = []
     for i in range(len(timings)):
@@ -1313,6 +1305,7 @@ def get_all_poisson_loglikelihoods_per_chr(timings,plambda,BP_likelihoods,observ
     return(SNV_likelihoods)
 
 
+@profile
 def find_best_SNV_likelihood(plambda, timings, BP_likelihoods):
     SNV_likelihoods = {}
     best = {}
@@ -1342,6 +1335,7 @@ def find_best_SNV_likelihood(plambda, timings, BP_likelihoods):
 
     return(total,best) # also need to return which tree is the best and which row of that tree is the best.    
 
+@profile
 def BP_and_SNV_loglik(plambda, p_up, p_down, trees_and_timings, pre, mid, post):
     
     BP_likelihoods = get_BP_likelihoods(
@@ -1358,6 +1352,7 @@ def BP_and_SNV_loglik(plambda, p_up, p_down, trees_and_timings, pre, mid, post):
     return(-total)
 
 
+@profile
 def find_BP_and_SNV_loglik(plambda_start, p_up_start, p_down_start, trees_and_timings, pre, mid, post, p_window, plambda_window):
 
     best_loglik = float("inf")
@@ -1397,12 +1392,14 @@ def find_BP_and_SNV_loglik(plambda_start, p_up_start, p_down_start, trees_and_ti
 
 
 
+@profile
 def objective_function_SNV_loglik(plambda,timings,BP_likelihoods):
     total,best = find_best_SNV_likelihood(plambda,timings,BP_likelihoods)
     #print(best)
     return(-total)
 
 
+@profile
 def path_code_to_pre_mid_post(path):
     bits = [int(x) for x in path.split("G")] + [-1,-1]
     pre, mid, post = bits[0:3]
@@ -1429,6 +1426,7 @@ def path_code_to_pre_mid_post(path):
 # The function first checks if the two trees have different lengths, in which case it returns False. 
 # If the length is equal to 1, the function returns whether the single node value is equal. 
 # If the length is greater than 1, the function recursively compares the two children trees.
+@profile
 def is_the_same_CN_tree(tree1,tree2):
     if len(tree1) != len(tree2):
         return False
@@ -1445,6 +1443,7 @@ def is_the_same_CN_tree(tree1,tree2):
 # If the two trees have different lengths, the function returns 0. 
 # If the length is equal to 1, the function returns 1 if the single node value is equal, or 0 otherwise. 
 # If the length is greater than 1, the function recursively compares the two children trees and adds 1 if the current node value is equal.
+@profile
 def count_matching_CN_nodes(tree1,tree2):
     if len(tree1) != len(tree2):
         return 0
@@ -1461,12 +1460,14 @@ def count_matching_CN_nodes(tree1,tree2):
 # This function takes a single tree as input and returns the number of nodes in the tree. 
 # If the length of the tree is equal to 1, the function returns 1, indicating that there's only one node in the tree. 
 # If the length is greater than 1, the function recursively counts the number of nodes in the two children trees and adds 1 to represent the current node.
+@profile
 def count_nodes(tree):
     if "child" in tree and tree["child"] is not None:
         return count_nodes(tree["child"]) + count_nodes(tree["complement"]) + 1
     return 1 
 
 # here's an example implementation of a function that takes a tree and swaps the 'child' and 'complement' nodes to ensure that 'child' always has a greater 'copy_number' than 'complement'. In case of ties, it also ensures that 'child' has a smaller 'epoch_created':
+@profile
 def sort_tree_by_copy_number(tree):
     if tree is None:
         return None
@@ -1496,6 +1497,7 @@ def sort_tree_by_copy_number(tree):
 # If only one tree has a child or complement key missing, the function returns False. 
 # If both trees have child or complement keys, the function recursively calls itself on the child or complement of the two trees. 
 # If all checks return True, the function returns True, indicating that the two trees are topologically identical and have the same epoch_created value and copy_number value at each node.
+@profile
 def is_the_same_dict_tree_by_epoch_and_time_created(tree1,tree2):
     #if tree1['unique_identifier'] != tree2['unique_identifier']:
     #    return False
@@ -1532,6 +1534,7 @@ def is_the_same_dict_tree_by_epoch_and_time_created(tree1,tree2):
 # Here's a modified version of the function that sums the absolute differences between the epoch_created values of each node for the nodes that have identical copy_number value:
 # This function works similarly to the previous compare_trees function, but now adds the absolute difference between the epoch_created values of each node to sum if the copy_number values are equal. 
 # The rest of the function remains the same as in the compare_trees function.
+@profile
 def sum_tree_distance(tree1, tree2):
     sum = 0
 
@@ -1549,6 +1552,7 @@ def sum_tree_distance(tree1, tree2):
 
     return sum
 
+@profile
 def count_nodes_with_same_copy_number(tree1, tree2):
     count = 0
     if 'copy_number' in tree1 and 'copy_number' in tree2 and tree1['copy_number'] == tree2['copy_number']:
@@ -1560,6 +1564,7 @@ def count_nodes_with_same_copy_number(tree1, tree2):
 #This function uses recursion to iterate through both trees and count the number of nodes that have the same 'copy_number' value. It first checks if the current nodes in both trees have a 'copy_number' key, and if they do and their values are equal, it increments the count by 1.
 #The function then checks if both trees have child nodes with keys 'child' and 'complement', and if they do, it calls itself recursively for these child nodes and adds the returned count to the total count. 
 
+@profile
 def count_nodes_with_same_properties(tree1, tree2):
     count = 0
     if 'copy_number' in tree1 and 'copy_number' in tree2 and tree1['copy_number'] == tree2['copy_number'] and \
@@ -1573,6 +1578,7 @@ def count_nodes_with_same_properties(tree1, tree2):
 
 # write a function that takes a CN tree and a timings estimate and puts them together in the same structure as the truth data for comparison
 # Here's a function that takes a tree data structure in the form [value, [child1, child2]] and converts it into a dictionary-like data structure in the form {'copy_number': value, 'child': child1, 'complement': child2}:
+@profile
 def convert_to_dict_tree(tree):
     if len(tree) == 3:
         copy_number, child1, child2 = tree
@@ -1588,6 +1594,7 @@ def convert_to_dict_tree(tree):
 # The function first unpacks the value and [child1, child2] components of the input tree and assigns them to the variables copy_number and children. It then further unpacks children into child1 and child2. If either child1 or child2 are lists, the function recursively calls convert_to_dict_tree
 
 # this function converts a tree in dictionary format to a list representation so its easy to visually inspect
+@profile
 def convert_dict_tree_to_list(tree):
     if tree is None:
         return None
@@ -1609,6 +1616,7 @@ def convert_dict_tree_to_list(tree):
 
 # now write a function with two arguments, the first is a dictionary-like tree data structure in the form {'copy_number': value, 'child': child1, 'complement': child2} called tree and the second is a list of numbers which is as long as the number of nodes in the tree. Add these numbers to the tree like data structure under the key "epoch_created" in a depth first way
 # Here's a function that takes a dictionary-like tree data structure tree and a list of numbers and adds the numbers to the tree data structure under the key 'epoch_created' in a depth-first manner:
+@profile
 def add_epoch_created(dict_tree, epoch_list):
     #print(dict_tree)
     #print(epoch_list)
@@ -1628,6 +1636,7 @@ def add_epoch_created(dict_tree, epoch_list):
 
 
 # now we write a function that can fully convert to the discovered tree and turn it into the form of the generated tree
+@profile
 def CN_tree_list_and_epoch_array_to_dictionary_tree(CN_tree,epoch_list):
     dict_tree = convert_to_dict_tree(CN_tree)
     #print(dict_tree)
@@ -1684,7 +1693,7 @@ real_rate = rate
 
 # the parameters that govern the search depth:
 top = 3 # top describes how many of the top solutions to go through
-p_window = 1
+p_window = 0
 plambda_window = 0.7
 
 print("SEARCH PARAMETERS ARE: ")
@@ -1837,6 +1846,7 @@ if not do_simulation:
 ##### 
 ##### 
 
+@profile
 def sum_SNV_counts(observed_SNV_multiplicities):
     d = observed_SNV_multiplicities
     total = 0
@@ -1846,6 +1856,7 @@ def sum_SNV_counts(observed_SNV_multiplicities):
     return total
 
 
+@profile
 def sum_chrom_multiplicities(observed_CN_multiplicities):
     return sum(observed_CN_multiplicities.values())
 
