@@ -1538,11 +1538,11 @@ def is_the_same_dict_tree_by_epoch_and_time_created(tree1,tree2):
         return False
 
     if (tree1.get('child') is not None and 
-            not compare_trees(tree1['child'], tree2['child'])):
+            not is_the_same_dict_tree_by_epoch_and_time_created(tree1['child'], tree2['child'])):
         return False
 
     if (tree1.get('complement') is not None and 
-            not compare_trees(tree1['complement'], tree2['complement'])):
+            not is_the_same_dict_tree_by_epoch_and_time_created(tree1['complement'], tree2['complement'])):
         return False
 
     return True
@@ -1618,15 +1618,18 @@ def convert_dict_tree_to_list(tree):
 
     copy_number = tree.get('copy_number')
     epoch_created = tree.get('epoch_created')
-    if tree["child"] is not None:
+
+    if 'child' in tree and tree["child"] is not None:
         epoch_killed = tree["child"]["epoch_created"]
     else:
-        epoch_killed = max_epochs
+        epoch_killed = total_epochs #max_epochs
 
     child_tree = convert_dict_tree_to_list(tree.get('child'))
     complement_tree = convert_dict_tree_to_list(tree.get('complement'))
-
-    return [(copy_number, epoch_created), child_tree, complement_tree]
+    if child_tree is None:
+        return [(copy_number, epoch_killed)]
+    #return [(copy_number, epoch_created), child_tree, complement_tree]
+    return [(copy_number, epoch_killed), child_tree, complement_tree]
 # This function uses recursion to traverse the dictionary tree and convert each node into a tuple containing the 'copy_number' and 'epoch_created' fields, and two lists representing the 'child' and 'complement' subtrees, respectively. If a node does not have a 'child' or 'complement' subtree, the corresponding list will be None.
 
 
@@ -1634,16 +1637,16 @@ def convert_dict_tree_to_list(tree):
 # now write a function with two arguments, the first is a dictionary-like tree data structure in the form {'copy_number': value, 'child': child1, 'complement': child2} called tree and the second is a list of numbers which is as long as the number of nodes in the tree. Add these numbers to the tree like data structure under the key "epoch_created" in a depth first way
 # Here's a function that takes a dictionary-like tree data structure tree and a list of numbers and adds the numbers to the tree data structure under the key 'epoch_created' in a depth-first manner:
 #@profile
-def add_epoch_created(dict_tree, epoch_list):
+def add_epoch_bifurcated(dict_tree, epoch_list):
     #print(dict_tree)
     #print(epoch_list)
     dict_tree['epoch_created'] = epoch_list.pop(0)
 
     if 'child' in dict_tree:
-        add_epoch_created(dict_tree['child'], epoch_list)
+        add_epoch_bifurcated(dict_tree['child'], epoch_list)
 
     if 'complement' in dict_tree:
-        add_epoch_created(dict_tree['complement'], epoch_list)
+        add_epoch_bifurcated(dict_tree['complement'], epoch_list)
 
     return dict_tree
 
@@ -1652,16 +1655,42 @@ def add_epoch_created(dict_tree, epoch_list):
 # If the 'complement' key is present, the function performs a similar operation. The final tree with the 'epoch_created' values is returned.
 
 
+def update_to_epoch_created(tree, parent_epoch=None):
+    if 'child' in tree and tree['child'] is not None:
+        update_to_epoch_created(tree['child'], tree['epoch_created'])
+    
+    if 'complement' in tree and tree['complement'] is not None:
+        update_to_epoch_created(tree['complement'], tree['epoch_created'])
+
+    if parent_epoch is not None:
+        tree['epoch_created'] = parent_epoch
+
+    return(tree)
+
+
 # now we write a function that can fully convert to the discovered tree and turn it into the form of the generated tree
 #@profile
 def CN_tree_list_and_epoch_array_to_dictionary_tree(CN_tree,epoch_list):
     dict_tree = convert_to_dict_tree(CN_tree)
     #print(dict_tree)
     epoch_list = list(epoch_list)
-    dict_tree = add_epoch_created(dict_tree, epoch_list)
+    dict_tree = add_epoch_bifurcated(dict_tree, epoch_list)
+    dict_tree = update_to_epoch_created(dict_tree)
     return dict_tree
 
+def filter_tree(tree, keys_to_keep):
+    filtered_tree = {}
+    for key in keys_to_keep:
+        if key in tree:
+            filtered_tree[key] = tree[key]
 
+    if 'child' in tree and tree['child'] is not None:
+        filtered_tree['child'] = filter_tree(tree['child'], keys_to_keep)
+
+    if 'complement' in tree and tree['complement'] is not None:
+        filtered_tree['complement'] = filter_tree(tree['complement'], keys_to_keep)
+
+    return filtered_tree
 
 ##### STEP 10; run the simulation 
 #and try to find the parameters that created the simulation by optimising the likelihood of the simulated genome
@@ -1680,12 +1709,13 @@ cache_results = False
 #cache_results = True
 
 do_search = False
-do_search = True
+#do_search = True
 
 # the parameters that generated the simulation:
 pre = 1
 mid = -1 
 post = -1
+total_epochs = pre+mid+post+(pre>=0)+(mid>=0)
 p_up = 0.13
 p_down = 0.13
 rate = 100
@@ -1748,7 +1778,7 @@ if do_simulation:
         print(simulated_chromosomes[chrom])
 
     print("the truth trees are:")
-    truth_trees = create_truth_trees(simulated_chromosomes)
+    truth_trees =  create_truth_trees(simulated_chromosomes)
     for chrom_type in truth_trees:
         print(truth_trees[chrom_type])
 
@@ -1904,6 +1934,8 @@ if do_search:
             p_down = int(searchable_likelihoods['p_down'].iloc[res])
             pre, mid, post = path_code_to_pre_mid_post(path)
 
+
+
         print("path: "+str(path))
         print("p_up: "+str(p_up))
         print("p_down: "+str(p_down))
@@ -1994,6 +2026,17 @@ else:
     d.close()
     # at some point evaluate the relative value of the likelihood contributed from the BP model to the likelihood contributed by the SNV model
 
+def order_tree_keys_alphabetically(tree):
+    ordered_tree = {}
+
+    for key in sorted(tree.keys()):
+        if key in ['child', 'complement']:
+            ordered_tree[key] = order_tree_keys_alphabetically(tree[key]) if tree[key] else None
+        else:
+            ordered_tree[key] = tree[key]
+
+    return ordered_tree
+
 for res in sorted(results):
     print(res)
     val, pre_est, mid_est, post_est, p_up_est, p_down_est, plambda_est, result = res
@@ -2008,13 +2051,17 @@ for res in sorted(results):
 
     total, best = find_best_SNV_likelihood(plambda_est,trees_and_timings,BP_likelihoods)
 
+    simulated_trees = create_truth_trees(simulated_chromosomes)
+    simplified_simulated_trees = {}
     estimated_trees = {}
     for chrom in best:
-        print("chrom: "+str(chrom))
+        print("printing the best likelihoods found in the search")
+        for i in range(10):
+            print("chrom: "+str(chrom))
         max_lik, tree_index, row_index = best[chrom]
 
         print("trees and timings")
-        print(trees_and_timings)
+        print(trees_and_timings[chrom])
         print("best one")
         print(tree_index)
         print(trees_and_timings[chrom][tree_index])
@@ -2043,7 +2090,6 @@ for res in sorted(results):
         print(parents)
 
         estimated_tree = CN_tree_list_and_epoch_array_to_dictionary_tree(CN_tree,epoch_list)
-        print(estimated_tree)
         estimated_trees[chrom] = estimated_tree
 
         # epoch_created in each tree in 'estimated_trees' is actually the bifurcation times to create the next node. 
@@ -2051,9 +2097,14 @@ for res in sorted(results):
         # epoch_created in the truth trees is actually the real time that the chromosome was created. 
         # In the estimated trees, the time the parent bifurcates is the time that the tree was actually created. 
 
-        estimated_trees[chrom]
-        
+        print("estimated tree")
+        estimated_trees[chrom] = order_tree_keys_alphabetically(estimated_trees[chrom])
+        print(estimated_trees[chrom])
 
+        print("simulated tree")
+        simplified_simulated_trees[chrom] = order_tree_keys_alphabetically(filter_tree(simulated_trees[chrom],keys_to_keep = ["copy_number","epoch_created"]))
+        print(simplified_simulated_trees[chrom])
+        
     # now compare the results to the truth!
     # CN tree is a list that is estimated when optimising the lieklihood. 
     # Need a way to pass that back
@@ -2062,8 +2113,12 @@ for res in sorted(results):
     # also need a way to annotate the estimated tree with estimated number of SNVs under each branch of the tree.
     # being able to estimate the individual timing of each SNV will be very valuable
 
-    #simulated_trees = create_truth_trees(simulated_chromosomes)
-    simulated_trees = truth_trees
+    simulated_trees = simplified_simulated_trees #truth_trees
+
+    total_nodes = 0
+    num_chrom_with_correct_CN = 0
+    num_chrom_with_correct_CN_and_epoch_created = 0
+    average_distance_from_truth_of_epoch_created = 0
     for chrom in estimated_trees:
         simulated_trees[chrom] = sort_tree_by_copy_number(simulated_trees[chrom])
         estimated_trees[chrom] = sort_tree_by_copy_number(estimated_trees[chrom])
@@ -2071,7 +2126,7 @@ for res in sorted(results):
             print("##### CHROM: " + str(chrom))
         #print("The estimated tree is: " + str(estimated_trees[chrom]))
         #print("The simulated tree is: " + str(simulated_trees[chrom]))
-        print("The simulated tree looks like: " + str(convert_dict_tree_to_list(simulated_trees[chrom])))
+        print("The simulated tree looks like: " + str(simulated_trees[chrom]))
         print("The estimated tree looks like: " + str(convert_dict_tree_to_list(estimated_trees[chrom])))
         if is_the_same_dict_tree_by_epoch_and_time_created(estimated_trees[chrom],simulated_trees[chrom]):
             print("They are the same")
@@ -2079,28 +2134,50 @@ for res in sorted(results):
             print("They are NOT the same")
 
         tree_sim = count_nodes_with_same_copy_number(estimated_trees[chrom], simulated_trees[chrom])    
+        num_chrom_with_correct_CN += tree_sim #== sim_tree_length)
         sim_tree_len = count_nodes(simulated_trees[chrom])
+        total_nodes += sim_tree_len
         print("In total there are " + str(tree_sim) + " nodes that have the exact same copy numbers out of " + 
                 str(sim_tree_len))
         print("So this tree is " + str(int(float(tree_sim)*100/float(sim_tree_len))) + "% correct.")
         tree_sim = count_nodes_with_same_properties(estimated_trees[chrom], simulated_trees[chrom])    
+        num_chrom_with_correct_CN_and_epoch_created += tree_sim #== tree_sim_length)
+
         print("In total there are " + str(tree_sim) + " nodes that have the exact same copy numbers and epochs created out of " + 
                 str(sim_tree_len))
         print("So this tree is " + str(int(float(tree_sim)*100/float(sim_tree_len))) + "% correct.")
 
         print("It is quite hard to get the tree exactly correct so of the nodes that are correct by copynumber sum the difference in epoch_created")
         tree_sim = sum_tree_distance(estimated_trees[chrom], simulated_trees[chrom])
+        average_distance_from_truth_of_epoch_created += float(tree_sim)/float(sim_tree_len)/23
         print("The average distance per node is " + str(float(tree_sim)/float(sim_tree_len)))
+
+
+    print("The total number of nodes in the tree is:")
+    print(total_nodes)
+
+    print("The number of nodes that match the true tree structure and have the correct CNs in our best estimate is:")
+    print(num_chrom_with_correct_CN)
+
+    print("The number of nodes that match the true tree structure and have the correct CNs AND the correct estimate for epoch created in our best estimate is:")
+    print(num_chrom_with_correct_CN_and_epoch_created)
+
+    print("The average distance of epoch created across all nodes to the true value is:")
+    print(average_distance_from_truth_of_epoch_created)
 
 # there seem to be a few artificial differences in the trees, like arbritrarily different timing conventions
 # need to fix this to be able to estimate how well we are doing at tree similarity.
 
 
-if __name__ == '__main__':
-    # profile the entire program
-    cProfile.run('main()', 'my_program_stats')
+#if __name__ == '__main__':
+#    # profile the entire program
+#    cProfile.run('main()', 'my_program_stats')
+#
+#    # print the profiling results
+#    stats = pstats.Stats('my_program_stats')
+#    stats.sort_stats('tottime')
+#    stats.print_stats()
 
-    # print the profiling results
-    stats = pstats.Stats('my_program_stats')
-    stats.sort_stats('tottime')
-    stats.print_stats()
+
+# great, we are great at estimating the trees. Now we need to save the results in a way so that it is easy to make summaries of how well we are estimating the trees
+
