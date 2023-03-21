@@ -1701,24 +1701,54 @@ def filter_tree(tree, keys_to_keep):
 ##### 
 
 print("START")
-test_case = 1 #sys.argv[1]
+#test_case = 1 #sys.argv[1]
+test_case = sys.argv[1]
 do_simulation = False 
-#do_simulation = True 
+do_simulation = True 
 
 cache_results = False
-#cache_results = True
+cache_results = True
 
 do_search = False
-#do_search = True
+do_search = True
+
+import random
+import math
+
+def random_decimal(min_value, max_value, decimal_places):
+    random_number = random.uniform(min_value, max_value)
+    return round(random_number, decimal_places)
+
+def random_integer_log_scale(min_value, max_value):
+    log_min = math.log(min_value)
+    log_max = math.log(max_value)
+    random_log = random.uniform(log_min, log_max)
+    return int(round(math.exp(random_log)))
+
+def biased_sample(p,min_value,max_value):
+    other_values_count = max_value - min_value
+    
+    if random.random() < p:
+        return min_value
+    else:
+        return random.randint(min_value + 1, max_value)
 
 # the parameters that generated the simulation:
-pre = 1
-mid = -1 
-post = -1
+max_epochs = 4
+pre = random.randint(0,max_epochs) 
+mid = biased_sample(0.5,-1,max_epochs) #-1 
+post = biased_sample(0.8,-1,max_epochs)
+
+if mid == -1 and post >=0:
+    temp = mid
+    mid = -1
+    post = temp
+
+
 total_epochs = pre+mid+post+(pre>=0)+(mid>=0)
-p_up = 0.13
-p_down = 0.13
-rate = 100
+p_up = random_decimal(0.00,0.30,2) #0.13
+p_down = random_decimal(p_up*0.5,min(0.3,p_up*2),2) #0.13
+rate = random_integer_log_scale(10,100000) #100
 
 print("SIMULATION PARAMETERS ARE: ")
 print("pre: "+ str(pre))
@@ -1739,7 +1769,7 @@ real_p_down = p_down
 real_rate = rate
 
 # the parameters that govern the search depth:
-top = 2 # top describes how many of the top solutions to go through
+top = 6 # top describes how many of the top solutions to go through
 p_window = 0
 plambda_window = 0.1
 
@@ -1749,7 +1779,7 @@ print("additive window width to search around top estimates of enuploidy probabi
 print("multiplicative window width to search around top estimates of the poisson parameter: " + str(p_window))
 
 
-max_default_path_length = 0
+max_default_path_length = 2
 default_paths = [str(x) for x in range(max_default_path_length)]
 default_paths += [str(x) + "G" + str(y) 
         for x in range(max_default_path_length) 
@@ -2037,7 +2067,7 @@ def order_tree_keys_alphabetically(tree):
 
     return ordered_tree
 
-for res in sorted(results):
+for i,res in enumerate(sorted(results)):
     print(res)
     val, pre_est, mid_est, post_est, p_up_est, p_down_est, plambda_est, result = res
     BP_likelihoods = get_BP_likelihoods(
@@ -2164,6 +2194,43 @@ for res in sorted(results):
 
     print("The average distance of epoch created across all nodes to the true value is:")
     print(average_distance_from_truth_of_epoch_created)
+
+    all_results[i] = {"average_distance_from_truth_of_epoch_created":average_distance_from_truth_of_epoch_created,
+            "num_chrom_with_correct_CN_and_epoch_created":num_chrom_with_correct_CN_and_epoch_created,
+            "num_chrom_with_correct_CN":num_chrom_with_correct_CN,
+            "total_nodes":total_nodes,
+            "estimated_trees":estimated_trees,
+            "simulated_trees":simulated_trees,
+            "res":res,
+            "val":val, 
+            "pre_est":pre_est,
+            "mid_est":mid_est, 
+            "post_est":post_est, 
+            "p_up_est":p_up_est, 
+            "p_down_est":p_down_est, 
+            "plambda_est":plambda_est, 
+            "result":result,
+            "BP_likelihoods":BP_likelihoods,
+            "total_SNV_likelihood":total,
+            "best_SNV_likelihood":best,
+            "pre":pre,
+            "mid":mid,
+            "post":post,
+            "total_epochs":total_epochs,
+            "p_up":p_up,
+            "p_down":p_down,
+            }
+
+d = shelve.open('file3_'+str(test_case)+'.txt')           
+d['all_results'] = all_results
+d.close()
+
+
+
+
+
+
+
 
 # there seem to be a few artificial differences in the trees, like arbritrarily different timing conventions
 # need to fix this to be able to estimate how well we are doing at tree similarity.
