@@ -21,5 +21,5 @@ for file_name in os.listdir(folder_path):
                         print(line + " [{}]".format(file_name))
                 #else:
                 #    print("Skipping line:", line)
-            for line in last_lines:
-                print(line + " [{}]".format(file_name))
+            #for line in last_lines:
+            #    print(line + " [{}]".format(file_name))

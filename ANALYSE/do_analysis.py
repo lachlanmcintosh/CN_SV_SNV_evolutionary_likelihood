@@ -25,6 +25,7 @@ for test_case in sorted_values:
     d = shelve.open('../file3_'+str(test_case)+'.txt')
     if len(list(d.keys())) > 0:
         all_results = d['all_results']
+        print("length of results:"+str(len(all_results.keys())))
         for key in all_results:
             print("key:" + str(key))
             print(all_results[key])
