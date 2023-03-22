@@ -2,7 +2,7 @@
 
 for rep in {0..0}
 do
-  for i in {0..10}
+  for i in {0..400}
   do
     sbatch ./simulation_singlecore.sh $i
   done

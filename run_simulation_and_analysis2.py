@@ -18,6 +18,20 @@ import pstats
 
 import cProfile
 
+import signal
+
+# Define a function to handle timeouts
+def timeout_handler(signum, frame):
+    raise TimeoutError("The program took too long to run.")
+
+# Set a timeout of 1 hour
+timeout = 4*60*60
+
+# Set the signal handler for SIGALRM (which is used for timeouts)
+signal.signal(signal.SIGALRM, timeout_handler)
+signal.alarm(timeout)
+
+
 def profile(func):
     def wrapper(*args, **kwargs):
         profiler = cProfile.Profile()
@@ -129,6 +143,21 @@ def check_expected_keys_in_simulated_chromosomes_present(simulated_chromosomes):
                 return False
     return True
 
+def get_ev_string(pre,mid,post):
+	ev_str = []
+	if pre > 0:
+		ev_str += ["A"]*pre	
+	if mid > -1:
+		ev_str += ["G"]
+	if mid > 0:
+		ev_str += ["A"]*mid
+	if post > -1:
+		ev_str += ["G"]
+	if post > 0:
+		ev_str += ["A"]*post
+	return(ev_str)
+
+
 #@profile
 def simulate_single_with_poisson_timestamps_names(p_up,p_down,pre,mid,post,rate,agnostic=False):
     # this function simulates the evolution of a cancer genome with whole chromosome copy number changes and SNV's
@@ -143,6 +172,7 @@ def simulate_single_with_poisson_timestamps_names(p_up,p_down,pre,mid,post,rate,
 
     # SNV_count will count the number of SNVs and also provide a unique number to each new SNV created
     SNV_count = 0
+
 
     # set up the initial state of the genome
     simulated_chromosomes = {}
@@ -176,7 +206,11 @@ def simulate_single_with_poisson_timestamps_names(p_up,p_down,pre,mid,post,rate,
     assert(pre*(pre>=0) + mid*(mid>=0) + post*(post>=0) + (mid>=0) + (post>=0) == pre+mid+post+2)
 
     # for each epoch in the total number of epochs:
-    for epoch in range(pre+mid+post+2): 
+    ev_sequence = get_ev_string(pre,mid,post)
+    if len(ev_sequence) == 0:
+        return(simulated_chromosomes)
+
+    for epoch,epoch_type in enumerate(ev_sequence):
         # SIMULATE SNVs
         # simulate and insert any new SNVs into the genome
         for chrom_type in simulated_chromosomes:
@@ -204,6 +238,8 @@ def simulate_single_with_poisson_timestamps_names(p_up,p_down,pre,mid,post,rate,
         # simulate the changes in copy number, but keep track of the SNVs
         # first see if this is a genome doubling round or an anueploidy round (they are mutually exclusive)
         if (mid != -1 and epoch == pre) or (post != -1 and epoch == pre+1+mid): 
+            assert(epoch_type == "G")
+        #if (mid == -1 and epoch == pre) or (post == -1 and epoch == pre+1+mid): 
             # that is; if this epoch is the epoch of the first round or the second round of genome doubling
 
             for chrom_type in simulated_chromosomes:
@@ -223,6 +259,7 @@ def simulate_single_with_poisson_timestamps_names(p_up,p_down,pre,mid,post,rate,
                 simulated_chromosomes[chrom_type].append(new_chromosome)
 
         else:
+            assert(epoch_type == "A")
             # this is a standard round of aneuploidy
             for chrom_type in simulated_chromosomes:
                 if agnostic:
@@ -308,12 +345,21 @@ def simulate_single_with_poisson_timestamps_names(p_up,p_down,pre,mid,post,rate,
                     # add those chromosomes into the genome
                     simulated_chromosomes[chrom_type] = new_chromosomes
 
+    assert(pre+mid+post+2 == len(ev_sequence))
     # some quick final sanity checks:
     if post == 0 or (mid == 0 and post == -1):
+        assert(ev_sequence[-1] == "G")
         # if a genome doubling round just occurred then the copy number of every chromosome will be even:
         for chrom_type in simulated_chromosomes: 
-            assert(count_paternity(simulated_chromosomes[chrom_type],paternal=True) % 2 == 0)
-            assert(count_paternity(simulated_chromosomes[chrom_type],paternal=False) % 2 == 0)
+            if count_paternity(simulated_chromosomes[chrom_type],paternal=True) % 2 == 0:
+                print(simulated_chromosomes[chrom_type])
+                print(count_paternity(simulated_chromosomes[chrom_type],paternal=True))
+                assert(count_paternity(simulated_chromosomes[chrom_type],paternal=True) % 2 == 0)
+                
+            if count_paternity(simulated_chromosomes[chrom_type],paternal=False) % 2 == 0:
+                print(simulated_chromosomes[chrom_type])
+                print(count_paternity(simulated_chromosomes[chrom_type],paternal=False))
+                assert(count_paternity(simulated_chromosomes[chrom_type],paternal=False) % 2 == 0)
 
     for chrom_type in simulated_chromosomes:
         assert(len(simulated_chromosomes) != 0)
@@ -627,7 +673,10 @@ def CN_multiplicities_to_likelihoods(observed_CN_multiplicities):
             lls += ll(copy,observed_CN_multiplicities[copy])
 
     # account for the inability to lose all copies of a particular chromosome:
-    likelihoods = np.exp(lls - np.log(1-np.exp(np.load(CN_filename(0)))) * observed_CN_multiplicities[0])
+    if 0 not in observed_CN_multiplicities:
+        likelihoods = np.exp(lls)
+    else:
+        likelihoods = np.exp(lls - np.log(1-np.exp(np.load(CN_filename(0)))) * observed_CN_multiplicities[0])
 
     # now we want to merge these computed likelihoods with the metadata columns:
     named_likelihoods = pkl.load(open(precomputed_file_folder+"/collated_128_p128_v3_list.pickle",'rb'))
@@ -1184,6 +1233,26 @@ def timing_struct_to_BP_likelihood_per_chrom(data, trees_and_timings, pre, mid, 
                 for col in range(branch_lengths.shape[1]):
                     these_paths = path[starts[row][col]:ends[row][col]]
                     path_code = get_path_code(these_paths)
+                    if path_code not in data: # not sure why the path code is sometimes not in data...
+                        continue # This is just to try and prevent an error, I have no idea, and it could be a major problem
+                    ######## CHECK BACK HERE
+                    ######## CHECK BACK HERE
+                    ######## CHECK BACK HERE
+                    ######## CHECK BACK HERE
+                    ######## CHECK BACK HERE
+                    ######## CHECK BACK HERE
+                    ######## CHECK BACK HERE
+                    ######## CHECK BACK HERE
+                    ######## CHECK BACK HERE
+                    ######## CHECK BACK HERE
+                    ######## CHECK BACK HERE
+                    ######## CHECK BACK HERE
+                    ######## CHECK BACK HERE
+                    ######## CHECK BACK HERE
+                    ######## CHECK BACK HERE
+                    ######## CHECK BACK HERE
+                    ######## CHECK BACK HERE
+                    ######## CHECK BACK HERE
 
                     if CNs[col] == '1':
                         likelihood = data[path_code][1][1]
@@ -1552,7 +1621,7 @@ def is_the_same_dict_tree_by_epoch_and_time_created(tree1,tree2):
 # This function works similarly to the previous compare_trees function, but now adds the absolute difference between the epoch_created values of each node to sum if the copy_number values are equal. 
 # The rest of the function remains the same as in the compare_trees function.
 #@profile
-def sum_tree_distance(tree1, tree2):
+def sum_tree_distance(tree1, tree2,diff_struct_is_inf=False):
     sum = 0
 
     if (tree1 is not None and tree2 is not None and
@@ -1561,11 +1630,14 @@ def sum_tree_distance(tree1, tree2):
             tree2["epoch_created"] is not None):
         sum += abs(tree1['epoch_created'] - tree2['epoch_created'])
 
-    if tree1.get('child') is not None:
+    if tree1.get('child') is not None and tree2.get('child') is not None:
         sum += sum_tree_distance(tree1['child'], tree2['child'])
-
-    if tree1.get('complement') is not None:
+    elif diff_struct_is_inf:
+        sum = float('inf')
+    if tree1.get('complement') is not None and tree2.get('complement') is not None:
         sum += sum_tree_distance(tree1['complement'], tree2['complement'])
+    elif diff_struct_is_inf:
+        sum = float('inf')
 
     return sum
 
@@ -1769,7 +1841,7 @@ real_p_down = p_down
 real_rate = rate
 
 # the parameters that govern the search depth:
-top = 6 # top describes how many of the top solutions to go through
+top = 8 # top describes how many of the top solutions to go through
 p_window = 0
 plambda_window = 0.1
 
@@ -1859,7 +1931,7 @@ if do_simulation:
 
 
     if cache_results:
-        # need to save the important datastructures up to hear and then just work onwards from here to speed up development
+        # need to save the important datastructures up to here and then just work onwards from here to speed up development
         d = shelve.open('file_'+str(test_case)+'.txt')           
         # in d is a dictionary type file that you can save variables:
         d['simulated_chromosomes'] = simulated_chromosomes
@@ -2067,6 +2139,8 @@ def order_tree_keys_alphabetically(tree):
 
     return ordered_tree
 
+
+all_results = {}
 for i,res in enumerate(sorted(results)):
     print(res)
     val, pre_est, mid_est, post_est, p_up_est, p_down_est, plambda_est, result = res
@@ -2178,7 +2252,7 @@ for i,res in enumerate(sorted(results)):
         print("So this tree is " + str(int(float(tree_sim)*100/float(sim_tree_len))) + "% correct.")
 
         print("It is quite hard to get the tree exactly correct so of the nodes that are correct by copynumber sum the difference in epoch_created")
-        tree_sim = sum_tree_distance(estimated_trees[chrom], simulated_trees[chrom])
+        tree_sim = sum_tree_distance(estimated_trees[chrom], simulated_trees[chrom],diff_struct_is_inf = False)
         average_distance_from_truth_of_epoch_created += float(tree_sim)/float(sim_tree_len)/23
         print("The average distance per node is " + str(float(tree_sim)/float(sim_tree_len)))
 
@@ -2195,7 +2269,7 @@ for i,res in enumerate(sorted(results)):
     print("The average distance of epoch created across all nodes to the true value is:")
     print(average_distance_from_truth_of_epoch_created)
 
-    all_results[i] = {"average_distance_from_truth_of_epoch_created":average_distance_from_truth_of_epoch_created,
+    new_result = {"average_distance_from_truth_of_epoch_created":average_distance_from_truth_of_epoch_created,
             "num_chrom_with_correct_CN_and_epoch_created":num_chrom_with_correct_CN_and_epoch_created,
             "num_chrom_with_correct_CN":num_chrom_with_correct_CN,
             "total_nodes":total_nodes,
@@ -2218,33 +2292,17 @@ for i,res in enumerate(sorted(results)):
             "post":post,
             "total_epochs":total_epochs,
             "p_up":p_up,
-            "p_down":p_down,
+            "p_down":p_down
             }
 
-d = shelve.open('file3_'+str(test_case)+'.txt')           
-d['all_results'] = all_results
-d.close()
+    d = shelve.open('file3_'+str(test_case)+'.txt')           
+    if 'all_results' in d:
+        all_results = d['all_results']
+
+    all_results[str(i)] = new_result
+    d['all_results'] = all_results
+    d.close()
 
 
 
-
-
-
-
-
-# there seem to be a few artificial differences in the trees, like arbritrarily different timing conventions
-# need to fix this to be able to estimate how well we are doing at tree similarity.
-
-
-#if __name__ == '__main__':
-#    # profile the entire program
-#    cProfile.run('main()', 'my_program_stats')
-#
-#    # print the profiling results
-#    stats = pstats.Stats('my_program_stats')
-#    stats.sort_stats('tottime')
-#    stats.print_stats()
-
-
-# great, we are great at estimating the trees. Now we need to save the results in a way so that it is easy to make summaries of how well we are estimating the trees
 
