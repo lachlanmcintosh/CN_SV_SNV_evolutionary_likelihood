@@ -1492,6 +1492,7 @@ def path_code_to_pre_mid_post(path):
     return((pre,mid,post))
 
 
+
 ##### STEP 9; write code to compare trees
 ##### 
 ##### 
@@ -1841,7 +1842,7 @@ real_p_down = p_down
 real_rate = rate
 
 # the parameters that govern the search depth:
-top = 10 # top describes how many of the top solutions to go through
+top = 0 # 10# top describes how many of the top solutions to go through
 p_window = 0
 plambda_window = 0.1
 
@@ -1851,7 +1852,7 @@ print("additive window width to search around top estimates of enuploidy probabi
 print("multiplicative window width to search around top estimates of the poisson parameter: " + str(p_window))
 
 
-max_default_path_length = 2
+max_default_path_length = 0 #2
 default_paths = [str(x) for x in range(max_default_path_length)]
 default_paths += [str(x) + "G" + str(y) 
         for x in range(max_default_path_length) 
@@ -2029,6 +2030,7 @@ if do_search:
             pre = real_pre
             mid = real_mid
             post = real_post
+            path = get_ev_string(pre,mid,post) 
 
         else:
             path = searchable_likelihoods["path"].iloc[res]
@@ -2073,7 +2075,7 @@ if do_search:
     
 
         print("SELECT the best estimates")
-        total_time = 1
+        total_time = 0 # rtotal time refers to the number of epochs under which SNVs evolve.
         if pre > 0:
             total_time += pre
         if mid > 0:
@@ -2130,13 +2132,11 @@ else:
 
 def order_tree_keys_alphabetically(tree):
     ordered_tree = {}
-
     for key in sorted(tree.keys()):
         if key in ['child', 'complement']:
             ordered_tree[key] = order_tree_keys_alphabetically(tree[key]) if tree[key] else None
         else:
             ordered_tree[key] = tree[key]
-
     return ordered_tree
 
 
@@ -2231,7 +2231,7 @@ for result_index,res in enumerate(sorted(results)):
         #print("The estimated tree is: " + str(estimated_trees[chrom]))
         #print("The simulated tree is: " + str(simulated_trees[chrom]))
         print("The simulated tree looks like: " + str(simulated_trees[chrom]))
-        print("The estimated tree looks like: " + str(convert_dict_tree_to_list(estimated_trees[chrom])))
+        print("The estimated tree looks like: " + str(estimated_trees[chrom]))
         if is_the_same_dict_tree_by_epoch_and_time_created(estimated_trees[chrom],simulated_trees[chrom]):
             print("They are the same")
         else:
