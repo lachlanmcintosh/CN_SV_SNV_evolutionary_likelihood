@@ -1,54 +1,40 @@
 # import the required libraries
-
-import numpy as np
 import copy
-import pickle as pkl
-import re
-from more_itertools import locate
-import shelve
-import scipy
+import cProfile
+import numpy as np
 import pandas as pd
-import shelve
-from scipy.optimize import minimize_scalar
-import sys
-
-# import some libraries to keep track of how much computational time is being used in each function:
-import cProfile
+import pickle as pkl
 import pstats
-
-import cProfile
-
+import re
+import scipy
 import signal
+import shelve
+import sys
+from more_itertools import locate
+from scipy.optimize import minimize_scalar
 
+def pretty_print(x):
+    new_str = str(x)
+    if len(new_str) > 200:
+        new_str = new_str[:200]
+    print(new_str)
+    return(None)
+
+
+##### TIMEOUT LIMIT RUNTIME
 # Define a function to handle timeouts
 def timeout_handler(signum, frame):
     raise TimeoutError("The program took too long to run.")
 
-# Set a timeout of 1 hour
+# Set a timeout of 4 hours
 timeout = 4*60*60
 
 # Set the signal handler for SIGALRM (which is used for timeouts)
 signal.signal(signal.SIGALRM, timeout_handler)
 signal.alarm(timeout)
 
-
-def profile(func):
-    def wrapper(*args, **kwargs):
-        profiler = cProfile.Profile()
-        result = profiler.runcall(func, *args, **kwargs)
-        profiler.print_stats()
-        return result
-    return wrapper
-# In this example, we're defining a profile() function that takes a function as an argument and returns a new function that calls the original function with cProfile enabled. 
-#nThe new function uses the cProfile.Profile() class to create a new profiler object, and then calls the original function using the profiler.runcall() method. 
-# After the function has completed, the profiler results are printed to the console using the profiler.print_stats() method.
-# Once you've defined the @profile decorator, you can add it before each function in your Python program to enable cProfile profiling with "@profile"
-
-
-##### STEP 0; check the health of this program, many potentially unused functions are being ddeveloped here
+# check the health of this program, many potentially unused functions are being ddeveloped here
 import ast
-# with the help of chatgpt3, here is a funciton that can identify unused functions:
-###@profile
 def find_unused_functions(source_code):
     # Parse the source code into an abstract syntax tree
     tree = ast.parse(source_code)
@@ -74,7 +60,7 @@ def find_unused_functions(source_code):
 with open("run_simulation_and_analysis2.py") as f:
     source_code = f.read()
 unused_functions = find_unused_functions(source_code)
-print("Unused functions:", unused_functions)
+pretty_print("Unused functions:" +str(unused_functions))
 # This function first parses the source code of the Python program into an abstract syntax tree (AST). 
 # It then walks through the AST to identify all defined functions and all called functions. 
 # Finally, it computes the set difference between the defined and called functions to find the functions that are defined but not used.
@@ -124,38 +110,46 @@ for chrom_type in lengths:
     lengths[chrom_type] *= 1/100
 
 
-# count paternity takes in a list of simulated chromosomes and returns the number of a particular paternal type, 
-#@profile
-def count_paternity(chromosomes,paternal):
-    return( len([x for x in chromosomes if paternal == x["paternal"] and not x["dead"]]) )
+def count_paternity(chromosomes, paternal):
+    """
+    Count the number of chromosomes with a particular paternal type.
+    """
+    return len([chrom for chrom in chromosomes if chrom["paternal"] == paternal and not chrom["dead"]])
 
-#@profile
 def check_all_chrs_are_unique(simulated_chromosomes):
-    print(simulated_chromosomes)
-    ids = [x["unique_identifier"] for chrom in simulated_chromosomes for x in simulated_chromosomes[chrom]]
+    """
+    Check if all chromosomes have unique identifiers.
+    """
+    ids = [chrom["unique_identifier"] for chrom_type in simulated_chromosomes.values() for chrom in chrom_type]
     return len(ids) == len(set(ids))
 
-#@profile
 def check_expected_keys_in_simulated_chromosomes_present(simulated_chromosomes):
-    for chrom_type in simulated_chromosomes:
-        for chrom in simulated_chromosomes[chrom_type]:
-            if not sorted(["SNVs","paternal","epoch_created","parent","unique_identifier"]) == sorted(chrom.keys()):
+    """
+    Check if all keys that are expected to be present in simulated chromosomes are actually present.
+    """
+    expected_keys = ["SNVs", "paternal", "epoch_created", "parent", "unique_identifier"]
+    for chrom_type in simulated_chromosomes.values():
+        for chrom in chrom_type:
+            if not sorted(expected_keys) == sorted(chrom.keys()):
                 return False
     return True
 
-def get_ev_string(pre,mid,post):
-	ev_str = []
-	if pre > 0:
-		ev_str += ["A"]*pre	
-	if mid > -1:
-		ev_str += ["G"]
-	if mid > 0:
-		ev_str += ["A"]*mid
-	if post > -1:
-		ev_str += ["G"]
-	if post > 0:
-		ev_str += ["A"]*post
-	return(ev_str)
+def get_ev_string(pre, mid, post):
+    """
+    Generate a list of characters representing the evolutionary path the cancer takes 
+    """
+    ev_str = []
+    if pre > 0:
+        ev_str += ["A"] * pre
+    if mid > -1:
+        ev_str += ["G"]
+    if mid > 0:
+        ev_str += ["A"] * mid
+    if post > -1:
+        ev_str += ["G"]
+    if post > 0:
+        ev_str += ["A"] * post
+    return ev_str
 
 
 #@profile
@@ -187,7 +181,7 @@ def simulate_single_with_poisson_timestamps_names(p_up,p_down,pre,mid,post,rate,
                     "epoch_created" : -1, 
                     # the epoch a chromosome is created, i
                     # both maternal and paternal chromosomes are created "before time" in epoch -1
-                    "paternal" : (x % 2 == 0), 
+                    "paternal" : (x == 0), 
                     # True if paternal, False if maternal 
                     "SNVs":[], 
                     # a list of dicitonaries that describe the SNVs found on the chromosome, 
@@ -209,6 +203,9 @@ def simulate_single_with_poisson_timestamps_names(p_up,p_down,pre,mid,post,rate,
     ev_sequence = get_ev_string(pre,mid,post)
     if len(ev_sequence) == 0:
         return(simulated_chromosomes)
+
+    print("pre,mid,post:"+str((pre,mid,post)))
+    print("ev_sequence:"+str(ev_sequence))
 
     for epoch,epoch_type in enumerate(ev_sequence):
         # SIMULATE SNVs
@@ -239,10 +236,9 @@ def simulate_single_with_poisson_timestamps_names(p_up,p_down,pre,mid,post,rate,
         # first see if this is a genome doubling round or an anueploidy round (they are mutually exclusive)
         if (mid != -1 and epoch == pre) or (post != -1 and epoch == pre+1+mid): 
             assert(epoch_type == "G")
-        #if (mid == -1 and epoch == pre) or (post == -1 and epoch == pre+1+mid): 
-            # that is; if this epoch is the epoch of the first round or the second round of genome doubling
 
             for chrom_type in simulated_chromosomes:
+                new_chromosomes = []
                 for chrom in simulated_chromosomes[chrom_type]:
                     if chrom["dead"]:
                         continue
@@ -255,8 +251,9 @@ def simulate_single_with_poisson_timestamps_names(p_up,p_down,pre,mid,post,rate,
                     new_chromosome["unique_identifier"] = chrom_count
                     new_chromosome["epoch_created"] = epoch 
                     new_chromosome["parent"] = chrom["unique_identifier"]
+                    new_chromosomes += [new_chromosome]
 
-                simulated_chromosomes[chrom_type].append(new_chromosome)
+                simulated_chromosomes[chrom_type] += new_chromosomes
 
         else:
             assert(epoch_type == "A")
@@ -352,13 +349,13 @@ def simulate_single_with_poisson_timestamps_names(p_up,p_down,pre,mid,post,rate,
         # if a genome doubling round just occurred then the copy number of every chromosome will be even:
         for chrom_type in simulated_chromosomes: 
             if count_paternity(simulated_chromosomes[chrom_type],paternal=True) % 2 == 0:
-                print(simulated_chromosomes[chrom_type])
-                print(count_paternity(simulated_chromosomes[chrom_type],paternal=True))
+                pretty_print(simulated_chromosomes[chrom_type])
+                pretty_print(count_paternity(simulated_chromosomes[chrom_type],paternal=True))
                 assert(count_paternity(simulated_chromosomes[chrom_type],paternal=True) % 2 == 0)
                 
             if count_paternity(simulated_chromosomes[chrom_type],paternal=False) % 2 == 0:
-                print(simulated_chromosomes[chrom_type])
-                print(count_paternity(simulated_chromosomes[chrom_type],paternal=False))
+                pretty_print(simulated_chromosomes[chrom_type])
+                pretty_print(count_paternity(simulated_chromosomes[chrom_type],paternal=False))
                 assert(count_paternity(simulated_chromosomes[chrom_type],paternal=False) % 2 == 0)
 
     for chrom_type in simulated_chromosomes:
@@ -380,10 +377,10 @@ def simulate_single_with_poisson_timestamps_names(p_up,p_down,pre,mid,post,rate,
 # now make a structure to compare the truth tree to the found tree
 #@profile
 def insert_node_into_truth_tree(tree,node):
-    print("node")
-    print("\t"+str(node))
-    print("tree")
-    print("\t"+str(tree))
+    #pretty_print("node")
+    #pretty_print("\t"+str(node))
+    #pretty_print("tree")
+    #pretty_print("\t"+str(tree))
     assert(node["unique_identifier"] != tree["unique_identifier"])
 
     if node["parent"] == tree["unique_identifier"]:
@@ -557,27 +554,29 @@ def create_truth_trees(simulated_chromosomes):
         # insert all nodes and add metadat to tree and simplify:
         for new_node in sorted_list:
             trees[chrom_type] = insert_node_into_truth_tree(tree,new_node[1])
-        print("with nodes inserted:")
-        print(trees[chrom_type])
+        for i in range(5):
+            pretty_print("##### chrom_type:"+str(chrom_type))
+        pretty_print("with nodes inserted:")
+        pretty_print(trees[chrom_type])
         trees[chrom_type] = add_copynumber_to_tree(trees[chrom_type])
-        print(CN_tree_from_truth_tree(trees[chrom_type]))
-        print("with copynumber annotated:")
-        print(trees[chrom_type])
+        pretty_print(CN_tree_from_truth_tree(trees[chrom_type]))
+        pretty_print("with copynumber annotated:")
+        pretty_print(trees[chrom_type])
         trees[chrom_type] = add_SNV_multiplicity_to_tree(trees[chrom_type])
-        print(CN_tree_from_truth_tree(trees[chrom_type]))
-        print("with SNV multiplicity:")
-        print(trees[chrom_type])
+        pretty_print(CN_tree_from_truth_tree(trees[chrom_type]))
+        pretty_print("with SNV multiplicity:")
+        pretty_print(trees[chrom_type])
         trees[chrom_type] = remove_SNVs_from_tree(trees[chrom_type])
-        print(CN_tree_from_truth_tree(trees[chrom_type]))
-        print("with SNVs removed from the tree:")
-        print(trees[chrom_type])
-        print(CN_tree_from_truth_tree(trees[chrom_type]))
+        pretty_print(CN_tree_from_truth_tree(trees[chrom_type]))
+        pretty_print("with SNVs removed from the tree:")
+        pretty_print(trees[chrom_type])
+        pretty_print(CN_tree_from_truth_tree(trees[chrom_type]))
         trees[chrom_type] = remove_dead_nodes(trees[chrom_type])
-        print("with dead nodes removed:")
-        print(trees[chrom_type])
-        print(CN_tree_from_truth_tree(trees[chrom_type]))
-        print(make_left_heavy(CN_tree_from_truth_tree(trees[chrom_type])))
-        print("######\n"*5)
+        pretty_print("with dead nodes removed:")
+        pretty_print(trees[chrom_type])
+        pretty_print(CN_tree_from_truth_tree(trees[chrom_type]))
+        pretty_print(make_left_heavy(CN_tree_from_truth_tree(trees[chrom_type])))
+        pretty_print("######\n"*5)
 
     return(trees)
 
@@ -690,10 +689,10 @@ def CN_multiplicities_to_likelihoods(observed_CN_multiplicities):
     named_likelihoods.sort_values(by=['likelihood'], inplace=True, ascending=False)
 
     total = np.nansum(named_likelihoods["likelihood"])
-    #print("total likelihood sum to normalise: "+str(total))
+    #pretty_print("total likelihood sum to normalise: "+str(total))
     named_likelihoods["likelihood"] /= total
-    #print("best likelihoods")
-    #print(named_likelihoods[:][0:300].to_string())
+    #pretty_print("best likelihoods")
+    #pretty_print(named_likelihoods[:][0:300].to_string())
 
     return(named_likelihoods)
 
@@ -715,23 +714,23 @@ def likelihoods_to_marginal_likelihoods(likelihoods, top, default_paths):
     marginal_likelihoods = marginal_likelihoods.sort_values(by=['likelihood'], inplace=False, ascending=False)
     result = marginal_likelihoods.head(top)
 
-    print("inside likelihoods to marginal likelihoods")
-    print("marginal likelihoods")
-    print(marginal_likelihoods)
-    print("result")
-    print(result)
+    pretty_print("inside likelihoods to marginal likelihoods")
+    pretty_print("marginal likelihoods")
+    pretty_print(marginal_likelihoods)
+    pretty_print("result")
+    pretty_print(result)
 
     # Get the best row associated with each path in the default_paths list
     for path in default_paths:
-        print("in marginals")
-        print("path")
-        print(path)
+        pretty_print("in marginals")
+        pretty_print("path")
+        pretty_print(path)
         best_row = marginal_likelihoods.loc[marginal_likelihoods["path"] == path]#.sort_values('likelihood', ascending=False).iloc[0]
-        print("best_row")
-        print(best_row)
+        pretty_print("best_row")
+        pretty_print(best_row)
         result = pd.concat([result,best_row])
-        print("result")
-        print(result)
+        pretty_print("result")
+        pretty_print(result)
 
     # Remove duplicate rows again, in case any of the default paths were already in the top n rows
     result = result.drop_duplicates(subset='path', keep='first')
@@ -766,18 +765,18 @@ def likelihoods_to_best_likelihood_by_path(likelihoods, top, default_paths):
     # Take the top n rows by likelihood value
     result = df.head(top)
     for i in range(5):
-        print('inside top lieklihoods')
+        pretty_print('inside top lieklihoods')
     # Get the best row associated with each path in the default_paths list
     for path in default_paths:
-        print("in tops")
-        print("path")
-        print(path)
-        print("result")
-        print(result)
-        print("best_row")
+        pretty_print("in tops")
+        pretty_print("path")
+        pretty_print(path)
+        pretty_print("result")
+        pretty_print(result)
+        pretty_print("best_row")
         path_rows = df.loc[df["path"] == path]
         best_row = path_rows.loc[path_rows['likelihood'].idxmax()].to_frame().T
-        print("best_row")
+        pretty_print("best_row")
         result = pd.concat([result,best_row])
 
     # Remove duplicate rows again, in case any of the default paths were already in the top n rows
@@ -920,10 +919,10 @@ def complete_trees(trees):
 def generate_trees(observed_CNs,SNV_CNs):
     SNV_CNs.sort(reverse = True)
     observed_CNs.sort(reverse = True)
-    print("SNV_CNs")
-    print(SNV_CNs)
-    print("observed_CNs")
-    print(observed_CNs)
+    pretty_print("SNV_CNs")
+    pretty_print(SNV_CNs)
+    pretty_print("observed_CNs")
+    pretty_print(observed_CNs)
 
     # initially we start with the following tree for each chromosome:
     trees = [(sum(observed_CNs),(max(observed_CNs),),(min(observed_CNs),))]
@@ -939,8 +938,8 @@ def generate_trees(observed_CNs,SNV_CNs):
         if trees_with_new_node == []:
             # then there isn’t anywhere left to insert the new node into these trees
             # this shouldn’t happen unless this SNV_CN is also in our observed_CNs
-            print(SNV_CN)
-            print(observed_CNs)
+            pretty_print(SNV_CN)
+            pretty_print(observed_CNs)
             assert(SNV_CN in observed_CNs)
             continue
 
@@ -1090,7 +1089,7 @@ def get_timings_per_tree(tree,epochs):
 def get_all_trees_and_timings(observed_SNV_multiplicities, observed_CNs):
     trees_and_timings = {}
     for chrom in observed_SNV_multiplicities:
-        print(chrom)
+        pretty_print(chrom)
 
         all_trees = generate_trees( 
             observed_CNs = observed_CNs[chrom],
@@ -1107,10 +1106,10 @@ def get_all_trees_and_timings(observed_SNV_multiplicities, observed_CNs):
         # it might be possible to have None in one row but not all rows of the array?
 
         if len(trees_and_timings[chrom]) == 0:
-            print(trees_and_timings[chrom])
-            #print("CAREFUL\n"*10)
+            pretty_print(trees_and_timings[chrom])
+            #pretty_print("CAREFUL\n"*10)
 
-        print(trees_and_timings[chrom])
+        pretty_print(trees_and_timings[chrom])
     
     return(trees_and_timings)
 
@@ -1191,7 +1190,7 @@ def timing_struct_to_BP_likelihood_per_chrom(data, trees_and_timings, pre, mid, 
     all_BP_likelihoods = []
 
     for these_tts in trees_and_timings:
-        #print(these_tts)
+        #pretty_print(these_tts)
         if None in these_tts[3]:
             BP_likelihoods = -1
 
@@ -1210,14 +1209,14 @@ def timing_struct_to_BP_likelihood_per_chrom(data, trees_and_timings, pre, mid, 
             if post > 0:
                 path += ["A"]*post
 
-            #print("timings")
-            #print(these_tts)
+            #pretty_print("timings")
+            #pretty_print(these_tts)
 
-            #print("copy numbers")
-            #print(CNs)
+            #pretty_print("copy numbers")
+            #pretty_print(CNs)
 
-            #print("branch lengths")
-            #print(branch_lengths)
+            #pretty_print("branch lengths")
+            #pretty_print(branch_lengths)
 
             #>>> data = pickle.load(open("pre_mat129_u65_d10.precomputed.pickle",'rb'))
             # in the keys are all the possible paths...
@@ -1234,6 +1233,8 @@ def timing_struct_to_BP_likelihood_per_chrom(data, trees_and_timings, pre, mid, 
                     these_paths = path[starts[row][col]:ends[row][col]]
                     path_code = get_path_code(these_paths)
                     if path_code not in data: # not sure why the path code is sometimes not in data...
+                        print(path_code)
+                        sys.exit()
                         continue # This is just to try and prevent an error, I have no idea, and it could be a major problem
                     ######## CHECK BACK HERE
                     ######## CHECK BACK HERE
@@ -1266,21 +1267,21 @@ def timing_struct_to_BP_likelihood_per_chrom(data, trees_and_timings, pre, mid, 
                     paths[row][col] = path_code
                     likelihoods[row][col] = likelihood
 
-            #print("starts")
-            #print(starts)
-            #print("ends")
-            #print(ends)
-            #print("paths")
-            #print(paths)
-            #print("likelihoods")
-            #print(likelihoods)
+            #pretty_print("starts")
+            #pretty_print(starts)
+            #pretty_print("ends")
+            #pretty_print(ends)
+            #pretty_print("paths")
+            #pretty_print(paths)
+            #pretty_print("likelihoods")
+            #pretty_print(likelihoods)
 
             ll = np.log(likelihoods)
-            #print("loglikelihoods")
-            #print(ll)
+            #pretty_print("loglikelihoods")
+            #pretty_print(ll)
             BP_likelihoods = np.sum(ll[:,1:], axis=1)
-            #print("summed loglikelihoods")
-            #print(BP_likelihoods)
+            #pretty_print("summed loglikelihoods")
+            #pretty_print(BP_likelihoods)
 
         all_BP_likelihoods += [BP_likelihoods]
 
@@ -1325,14 +1326,14 @@ def get_poisson_loglikelihood(counts,stacked_branch_lengths,plambda,chrom,to_del
 
     not_a_probability = any([x>0 for x in total])
     if not_a_probability:
-        print(bits)
-        print(A)
-        print(B)
-        print(C)
-        print("\t"+str(summed))
-        print("\t"+str(total))
-        print(bits)
-        print(plambda * lengths[chrom])
+        pretty_print(bits)
+        pretty_print(A)
+        pretty_print(B)
+        pretty_print(C)
+        pretty_print("\t"+str(summed))
+        pretty_print("\t"+str(total))
+        pretty_print(bits)
+        pretty_print(plambda * lengths[chrom])
         assert(not not_a_probability)
 
     return(total)
@@ -1364,14 +1365,14 @@ def get_all_poisson_loglikelihoods_per_chr(timings,plambda,BP_likelihoods,observ
         #int_CNs = [int(x) for x in CNs]
         #if sum([max(int_CNs) == x for x in int_CNs]) == 1:
         #    not_root_CN = np.tile(np.array([int(x) != max(int_CNs) for x in unique_CNs]),(len(BP_likelihoods[i]),1))
-        #    print(not_CN_0)
+        #    pretty_print(not_CN_0)
         #    not_CN_0 = not_root_CN * not_CN_0
-        #    print(not_CN_0)
+        #    pretty_print(not_CN_0)
 
-        #print(CNs)
-        #print(unique_CNs)
-        #print(branch_lengths)
-        #print(stacked_branch_lengths)
+        #pretty_print(CNs)
+        #pretty_print(unique_CNs)
+        #pretty_print(branch_lengths)
+        #pretty_print(stacked_branch_lengths)
         # put together BP and poisson likelihoods
         this_SNV_likelihood = get_poisson_loglikelihood(
                 counts=counts, 
@@ -1380,11 +1381,11 @@ def get_all_poisson_loglikelihoods_per_chr(timings,plambda,BP_likelihoods,observ
                 chrom=chrom,
                 to_delete=to_delete
                 ) 
-        #print(chrom)
-        #print(i)
-        #print(this_SNV_likelihood)
+        #pretty_print(chrom)
+        #pretty_print(i)
+        #pretty_print(this_SNV_likelihood)
         this_SNV_likelihood += BP_likelihoods[i]
-        #print(this_SNV_likelihood)
+        #pretty_print(this_SNV_likelihood)
 
         SNV_likelihoods += [this_SNV_likelihood]
 
@@ -1446,9 +1447,9 @@ def find_BP_and_SNV_loglik(plambda_start, p_up_start, p_down_start, trees_and_ti
     best_p_down = 0
     best_plambda = 0
 
-    #print(p_up_start)
-    #print(p_down_start)
-    #print(window)
+    #pretty_print(p_up_start)
+    #pretty_print(p_down_start)
+    #pretty_print(window)
 
     for p_up in range(max(0,p_up_start - p_window), min(100,p_up_start + p_window + 1)):
         for p_down in range(max(0,p_down_start - p_window), min(100,p_down_start + p_window + 1)):
@@ -1467,10 +1468,10 @@ def find_BP_and_SNV_loglik(plambda_start, p_up_start, p_down_start, trees_and_ti
                 best_p_down = p_down
                 best_plambda = res.x
 
-                print("Best Log-Likelihood:", best_loglik)
-                print("Best p_up:", best_p_up)
-                print("Best p_down:", best_p_down)
-                print("Best plambda:", best_plambda)
+                pretty_print("Best Log-Likelihood:", best_loglik)
+                pretty_print("Best p_up:", best_p_up)
+                pretty_print("Best p_down:", best_p_down)
+                pretty_print("Best plambda:", best_plambda)
 
     # You can also use other optimization methods such as SLSQP, Nelder-Mead, Powell, COBYLA, TNC, BFGS, etc, as specified by the method argument.
 
@@ -1481,7 +1482,7 @@ def find_BP_and_SNV_loglik(plambda_start, p_up_start, p_down_start, trees_and_ti
 #@profile
 def objective_function_SNV_loglik(plambda,timings,BP_likelihoods):
     total,best = find_best_SNV_likelihood(plambda,timings,BP_likelihoods)
-    #print(best)
+    #pretty_print(best)
     return(-total)
 
 
@@ -1685,24 +1686,27 @@ def convert_to_dict_tree(tree):
 
 # this function converts a tree in dictionary format to a list representation so its easy to visually inspect
 #@profile
-def convert_dict_tree_to_list(tree):
+def convert_dict_tree_to_list(tree,total_epochs=None,is_truth=False):
     if tree is None:
         return None
 
     copy_number = tree.get('copy_number')
     epoch_created = tree.get('epoch_created')
 
-    if 'child' in tree and tree["child"] is not None:
-        epoch_killed = tree["child"]["epoch_created"]
-    else:
-        epoch_killed = total_epochs #max_epochs
+    if is_truth:
+        if 'child' in tree and tree["child"] is not None:
+            epoch_created = tree["child"]["epoch_created"]
+        else:
+            epoch_created = total_epochs #max_epochs
 
-    child_tree = convert_dict_tree_to_list(tree.get('child'))
-    complement_tree = convert_dict_tree_to_list(tree.get('complement'))
+    child_tree = convert_dict_tree_to_list(tree.get('child'),total_epochs,is_truth)
+    complement_tree = convert_dict_tree_to_list(tree.get('complement'),total_epochs,is_truth)
     if child_tree is None:
-        return [(copy_number, epoch_killed)]
-    #return [(copy_number, epoch_created), child_tree, complement_tree]
-    return [(copy_number, epoch_killed), child_tree, complement_tree]
+        return [(copy_number, epoch_created)]
+    return [(copy_number, epoch_created), child_tree, complement_tree]
+    #return [(copy_number, epoch_killed), child_tree, complement_tree]
+
+
 # This function uses recursion to traverse the dictionary tree and convert each node into a tuple containing the 'copy_number' and 'epoch_created' fields, and two lists representing the 'child' and 'complement' subtrees, respectively. If a node does not have a 'child' or 'complement' subtree, the corresponding list will be None.
 
 
@@ -1711,8 +1715,8 @@ def convert_dict_tree_to_list(tree):
 # Here's a function that takes a dictionary-like tree data structure tree and a list of numbers and adds the numbers to the tree data structure under the key 'epoch_created' in a depth-first manner:
 #@profile
 def add_epoch_bifurcated(dict_tree, epoch_list):
-    #print(dict_tree)
-    #print(epoch_list)
+    #pretty_print(dict_tree)
+    #pretty_print(epoch_list)
     dict_tree['epoch_created'] = epoch_list.pop(0)
 
     if 'child' in dict_tree:
@@ -1745,7 +1749,7 @@ def update_to_epoch_created(tree, parent_epoch=None):
 #@profile
 def CN_tree_list_and_epoch_array_to_dictionary_tree(CN_tree,epoch_list):
     dict_tree = convert_to_dict_tree(CN_tree)
-    #print(dict_tree)
+    #pretty_print(dict_tree)
     epoch_list = list(epoch_list)
     dict_tree = add_epoch_bifurcated(dict_tree, epoch_list)
     dict_tree = update_to_epoch_created(dict_tree)
@@ -1773,9 +1777,9 @@ def filter_tree(tree, keys_to_keep):
 ##### 
 ##### 
 
-print("START")
+pretty_print("START")
 #test_case = 1 #sys.argv[1]
-test_case = sys.argv[1]
+test_case = 10000 #sys.argv[1]
 do_simulation = False 
 do_simulation = True 
 
@@ -1808,9 +1812,9 @@ def biased_sample(p,min_value,max_value):
 
 # the parameters that generated the simulation:
 max_epochs = 4
-pre = random.randint(0,max_epochs) 
-mid = biased_sample(0.5,-1,max_epochs) #-1 
-post = biased_sample(0.8,-1,max_epochs)
+pre = 1 #random.randint(0,max_epochs) 
+mid = 0 #biased_sample(0.5,-1,max_epochs) #-1 
+post = -1 #biased_sample(0.8,-1,max_epochs)
 
 if mid == -1 and post >=0:
     temp = mid
@@ -1819,18 +1823,18 @@ if mid == -1 and post >=0:
 
 
 total_epochs = pre+mid+post+(pre>=0)+(mid>=0)
-p_up = random_decimal(0.00,0.30,2) #0.13
-p_down = random_decimal(p_up*0.5,min(0.3,p_up*2),2) #0.13
-rate = random_integer_log_scale(10,100000) #100
+p_up = 0.2 #random_decimal(0.00,0.30,2) #0.13
+p_down = 0.2 #random_decimal(p_up*0.5,min(0.3,p_up*2),2) #0.13
+rate = 100 #random_integer_log_scale(10,100000) #100
 
-print("SIMULATION PARAMETERS ARE: ")
-print("pre: "+ str(pre))
-print("mid: "+ str(mid))
-print("post: " + str(post))
-print("p_up: " + str(p_up))
-print("p_down: " + str(p_down))
-print("rate: " + str(rate))
-print("")
+pretty_print("SIMULATION PARAMETERS ARE: ")
+pretty_print("pre: "+ str(pre))
+pretty_print("mid: "+ str(mid))
+pretty_print("post: " + str(post))
+pretty_print("p_up: " + str(p_up))
+pretty_print("p_down: " + str(p_down))
+pretty_print("rate: " + str(rate))
+pretty_print("")
 
 
 # save the true parameters because there are name collisions:
@@ -1842,14 +1846,15 @@ real_p_down = p_down
 real_rate = rate
 
 # the parameters that govern the search depth:
-top = 0 # 10# top describes how many of the top solutions to go through
+
+top = 1 # 10# top describes how many of the top solutions to go through
 p_window = 0
 plambda_window = 0.1
 
-print("SEARCH PARAMETERS ARE: ")
-print("BP search depth: "+ str(top))
-print("additive window width to search around top estimates of enuploidy probabilities: " + str(p_window))
-print("multiplicative window width to search around top estimates of the poisson parameter: " + str(p_window))
+pretty_print("SEARCH PARAMETERS ARE: ")
+pretty_print("BP search depth: "+ str(top))
+pretty_print("additive window width to search around top estimates of enuploidy probabilities: " + str(p_window))
+pretty_print("multiplicative window width to search around top estimates of the poisson parameter: " + str(p_window))
 
 
 max_default_path_length = 0 #2
@@ -1859,14 +1864,14 @@ default_paths += [str(x) + "G" + str(y)
         for y in range(max_default_path_length) 
         if x+y <= max_default_path_length]
 
-print("default paths that will always get searched through")
-print(default_paths)
-print("default path lengths")
-print(len(default_paths))
+pretty_print("default paths that will always get searched through")
+pretty_print(default_paths)
+pretty_print("default path lengths")
+pretty_print(len(default_paths))
 
 
 if do_simulation:
-    print("Doing simulation")
+    pretty_print("Doing simulation")
     simulated_chromosomes = simulate_single_with_poisson_timestamps_names(
             p_up=p_up, 
             p_down=p_down, 
@@ -1875,49 +1880,49 @@ if do_simulation:
             post=post, 
             rate=rate)
 
-    print("Simulated genome was:")
+    pretty_print("Simulated genome was:")
     for chrom in simulated_chromosomes:
-        print("chrom: " + str(chrom))
-        print(simulated_chromosomes[chrom])
+        pretty_print("chrom: " + str(chrom))
+        pretty_print(simulated_chromosomes[chrom])
 
-    print("the truth trees are:")
+    pretty_print("the truth trees are:")
     truth_trees =  create_truth_trees(simulated_chromosomes)
     for chrom_type in truth_trees:
-        print(truth_trees[chrom_type])
+        pretty_print(truth_trees[chrom_type])
 
-    print("the CN simplified trees are:")
+    pretty_print("the CN simplified trees are:")
     CN_trees = CN_trees_from_truth_trees(truth_trees)
     for chrom_type in CN_trees:
-        print(CN_trees[chrom_type])
+        pretty_print(CN_trees[chrom_type])
 
 
-    print("observed chromosomal copynumbers")
+    pretty_print("observed chromosomal copynumbers")
     observed_CNs = count_CNs(simulated_chromosomes=simulated_chromosomes)
-    print(observed_CNs)
+    pretty_print(observed_CNs)
 
-    print("observed copynumber multiplicities")
+    pretty_print("observed copynumber multiplicities")
     observed_CN_multiplicities = count_CN_multiplicities(observed_CNs=observed_CNs)
-    print(observed_CN_multiplicities)
+    pretty_print(observed_CN_multiplicities)
 
-    print("likelihoods")
+    pretty_print("likelihoods")
     likelihoods = CN_multiplicities_to_likelihoods(observed_CN_multiplicities=observed_CN_multiplicities)
-    print(likelihoods)
+    pretty_print(likelihoods)
 
-    print("marginals")
+    pretty_print("marginals")
     marginal_likelihoods = likelihoods_to_marginal_likelihoods(
             likelihoods = likelihoods,
             top = top,
             default_paths = default_paths)
 
-    print(marginal_likelihoods)
+    pretty_print(marginal_likelihoods)
 
-    print("top likelihoods")
+    pretty_print("top likelihoods")
     top_likelihoods = likelihoods_to_best_likelihood_by_path(
             likelihoods = likelihoods,
             top = top,
             default_paths = default_paths)
 
-    print(top_likelihoods)
+    pretty_print(top_likelihoods)
 
 
     marginal_likelihoods = marginal_likelihoods.reindex(columns=top_likelihoods.columns)
@@ -1926,9 +1931,9 @@ if do_simulation:
     searchable_likelihoods = searchable_likelihoods.sort_values(by='path')
     searchable_likelihoods = searchable_likelihoods[searchable_likelihoods['likelihood'] > 1e-9]
 
-    print("The best likelihoods are:")
-    print(searchable_likelihoods)
-    print("paths to search: "+str(len(searchable_likelihoods.index)))
+    pretty_print("The best likelihoods are:")
+    pretty_print(searchable_likelihoods)
+    pretty_print("paths to search: "+str(len(searchable_likelihoods.index)))
 
 
     if cache_results:
@@ -1960,32 +1965,32 @@ if not do_simulation:
     top_likelihoods = d['top_likelihoods']
     searchable_likelihoods = d['searchable_likelihoods']
 
-    print("simulated_chromsomes")
-    print(simulated_chromosomes)
+    pretty_print("simulated_chromsomes")
+    pretty_print(simulated_chromosomes)
 
-    print("truth_trees")
-    print(truth_trees)
+    pretty_print("truth_trees")
+    pretty_print(truth_trees)
 
-    print("CN_trees")
-    print(CN_trees)
+    pretty_print("CN_trees")
+    pretty_print(CN_trees)
 
-    print("observed_CNs")
-    print(observed_CNs)
+    pretty_print("observed_CNs")
+    pretty_print(observed_CNs)
 
-    print("observed_CN_multiplicities")
-    print(observed_CN_multiplicities)
+    pretty_print("observed_CN_multiplicities")
+    pretty_print(observed_CN_multiplicities)
     
-    print("likelihoods")
-    print(likelihoods)
+    pretty_print("likelihoods")
+    pretty_print(likelihoods)
     
-    print("marginal_likelihoods")
-    print(marginal_likelihoods)
+    pretty_print("marginal_likelihoods")
+    pretty_print(marginal_likelihoods)
 
-    print("top_likelihoods")
-    print(top_likelihoods)
+    pretty_print("top_likelihoods")
+    pretty_print(top_likelihoods)
     
-    print("searchable_likelihoods")
-    print(searchable_likelihoods)
+    pretty_print("searchable_likelihoods")
+    pretty_print(searchable_likelihoods)
     d.close()
 
 
@@ -2012,17 +2017,18 @@ def sum_chrom_multiplicities(observed_CN_multiplicities):
 
 
 
-print("SNV multiplicities")
+pretty_print("SNV multiplicities")
 observed_SNV_multiplicities = count_SNV_multiplicities(simulated_chromosomes)
-print(observed_SNV_multiplicities)
+pretty_print(observed_SNV_multiplicities)
 
 if do_search:
-    print("searchable likelihoods")
-    print(searchable_likelihoods)
+    pretty_print("searchable likelihoods")
+    pretty_print(searchable_likelihoods)
 
     SEARCH_DEPTH = len(searchable_likelihoods)
     #SEARCH_DEPTH = 0
     results = []
+    all_trees_and_timings = []
     for res in range(SEARCH_DEPTH+1):
         if res == SEARCH_DEPTH:
             p_up = int(real_p_up*100)
@@ -2031,7 +2037,6 @@ if do_search:
             mid = real_mid
             post = real_post
             path = get_ev_string(pre,mid,post) 
-            # ok paths here now
 
         else:
             path = searchable_likelihoods["path"].iloc[res]
@@ -2039,25 +2044,23 @@ if do_search:
             p_down = int(searchable_likelihoods['p_down'].iloc[res])
             pre, mid, post = path_code_to_pre_mid_post(path)
 
-
-
-        print("path: "+str(path))
-        print("p_up: "+str(p_up))
-        print("p_down: "+str(p_down))
-        print("pre: "+str(pre))
-        print("mid: "+str(mid))
-        print("post: "+str(post))
+        pretty_print("path: "+str(path))
+        pretty_print("p_up: "+str(p_up))
+        pretty_print("p_down: "+str(p_down))
+        pretty_print("pre: "+str(pre))
+        pretty_print("mid: "+str(mid))
+        pretty_print("post: "+str(post))
 
         trees_and_timings = get_all_trees_and_timings(
             observed_SNV_multiplicities = observed_SNV_multiplicities,
             observed_CNs = observed_CNs
             )
 
-        print("investigate the problem")
+        pretty_print("investigate the problem")
         for chrom in trees_and_timings:
-            print(chrom)
+            pretty_print(chrom)
             if len(trees_and_timings[chrom]) < 1:
-                print(trees_and_timings[chrom])
+                pretty_print(trees_and_timings[chrom])
 
         for chrom in trees_and_timings:
             assert(len(trees_and_timings[chrom]) >= 1)
@@ -2075,7 +2078,7 @@ if do_search:
         # should not create the exact same data structure twice
     
 
-        print("SELECT the best estimates")
+        pretty_print("SELECT the best estimates")
         total_time = 0 # rtotal time refers to the number of epochs under which SNVs evolve.
         if pre > 0:
             total_time += pre
@@ -2085,14 +2088,14 @@ if do_search:
             total_time += post
 
         total_SNVs = sum_SNV_counts(observed_SNV_multiplicities)
-        print("total SNVs")
-        print(total_SNVs)
-        print("observed_SNV_multiplicities")
-        print(observed_SNV_multiplicities)
+        pretty_print("total SNVs")
+        pretty_print(total_SNVs)
+        pretty_print("observed_SNV_multiplicities")
+        pretty_print(observed_SNV_multiplicities)
 
         total_chromosomes = sum_chrom_multiplicities(observed_CN_multiplicities)
         plambda_start = total_SNVs / total_time / total_chromosomes * 23
-        print("plambda_start: " + str(plambda_start))  
+        pretty_print("plambda_start: " + str(plambda_start))  
         if plambda_start == 0:
             sys.exit()
         # this is a very rough estimate of expected value but it should align with the optimised for value. 
@@ -2114,20 +2117,20 @@ if do_search:
                 plambda_window = plambda_window
                 )
 
-        print(res)
+        pretty_print(res)
         results += [[best_loglik, pre, mid, post, best_p_up, best_p_down, best_plambda, result]]
-
+        all_trees_and_timings += [trees_and_timings] 
         #d = shelve.open('file2.txt')
         d = shelve.open('file2_'+str(test_case)+'.txt')           
         d['results'] = results
-        d['trees_and_timings'] = trees_and_timings
+        d['trees_and_timings'] = all_trees_and_timings
         d.close()
 else:
     # load the results array
     #d = shelve.open('file2.txt')
     d = shelve.open('file2_'+str(test_case)+'.txt')           
     results = d['results']
-    trees_and_timings = d['trees_and_timings']
+    all_trees_and_timings = d['trees_and_timings']
     d.close()
     # at some point evaluate the relative value of the likelihood contributed from the BP model to the likelihood contributed by the SNV model
 
@@ -2143,8 +2146,11 @@ def order_tree_keys_alphabetically(tree):
 
 all_results = {}
 for result_index,res in enumerate(sorted(results)):
-    print(res)
+    pretty_print(res)
     val, pre_est, mid_est, post_est, p_up_est, p_down_est, plambda_est, result = res
+    print(res)
+    trees_and_timings = all_trees_and_timings[result_index]
+    print(trees_and_timings)
     BP_likelihoods = get_BP_likelihoods(
             trees_and_timings = trees_and_timings,
             pre = pre_est,
@@ -2160,39 +2166,39 @@ for result_index,res in enumerate(sorted(results)):
     simplified_simulated_trees = {}
     estimated_trees = {}
     for chrom in best:
-        print("printing the best likelihoods found in the search")
+        pretty_print("printing the best likelihoods found in the search")
         for i in range(10):
-            print("chrom: "+str(chrom))
+            pretty_print("chrom: "+str(chrom))
         max_lik, tree_index, row_index = best[chrom]
 
-        print("trees and timings")
-        print(trees_and_timings[chrom])
-        print("best one")
-        print(tree_index)
-        print(trees_and_timings[chrom][tree_index])
+        pretty_print("trees and timings")
+        pretty_print(trees_and_timings[chrom])
+        pretty_print("best one")
+        pretty_print(tree_index)
+        pretty_print(trees_and_timings[chrom][tree_index])
         CN_tree, labelled_tree, count, timings, parents = trees_and_timings[chrom][tree_index]
 
-        print("CN tree")
-        print(CN_tree)
+        pretty_print("CN tree")
+        pretty_print(CN_tree)
 
-        print("labelled tree")
-        print(labelled_tree)
+        pretty_print("labelled tree")
+        pretty_print(labelled_tree)
 
-        print("count")
-        print(count)
+        pretty_print("count")
+        pretty_print(count)
 
-        print("timings")
-        print(timings)
+        pretty_print("timings")
+        pretty_print(timings)
 
-        print("row_index")
-        print(row_index)
+        pretty_print("row_index")
+        pretty_print(row_index)
 
-        print("epoch_list")
+        pretty_print("epoch_list")
         epoch_list = timings[row_index]
-        print(epoch_list)
+        pretty_print(epoch_list)
 
-        print("parents")
-        print(parents)
+        pretty_print("parents")
+        pretty_print(parents)
 
         estimated_tree = CN_tree_list_and_epoch_array_to_dictionary_tree(CN_tree,epoch_list)
         estimated_trees[chrom] = estimated_tree
@@ -2202,13 +2208,13 @@ for result_index,res in enumerate(sorted(results)):
         # epoch_created in the truth trees is actually the real time that the chromosome was created. 
         # In the estimated trees, the time the parent bifurcates is the time that the tree was actually created. 
 
-        print("estimated tree")
+        pretty_print("estimated tree")
         estimated_trees[chrom] = order_tree_keys_alphabetically(estimated_trees[chrom])
-        print(estimated_trees[chrom])
+        pretty_print(estimated_trees[chrom])
 
-        print("simulated tree")
+        pretty_print("simulated tree")
         simplified_simulated_trees[chrom] = order_tree_keys_alphabetically(filter_tree(simulated_trees[chrom],keys_to_keep = ["copy_number","epoch_created"]))
-        print(simplified_simulated_trees[chrom])
+        pretty_print(simplified_simulated_trees[chrom])
         
     # now compare the results to the truth!
     # CN tree is a list that is estimated when optimising the lieklihood. 
@@ -2228,47 +2234,49 @@ for result_index,res in enumerate(sorted(results)):
         simulated_trees[chrom] = sort_tree_by_copy_number(simulated_trees[chrom])
         estimated_trees[chrom] = sort_tree_by_copy_number(estimated_trees[chrom])
         for i in range(5):
-            print("##### CHROM: " + str(chrom))
-        #print("The estimated tree is: " + str(estimated_trees[chrom]))
-        #print("The simulated tree is: " + str(simulated_trees[chrom]))
-        print("The simulated tree looks like: " + str(simulated_trees[chrom]))
-        print("The estimated tree looks like: " + str(estimated_trees[chrom]))
+            pretty_print("##### CHROM: " + str(chrom))
+        #pretty_print("The estimated tree is: " + str(estimated_trees[chrom]))
+        #pretty_print("The simulated tree is: " + str(simulated_trees[chrom]))
+        pretty_print("The simulated tree looks like: " + str(simulated_trees[chrom]))
+        pretty_print("The simulated tree looks like: " + str(convert_dict_tree_to_list(simulated_trees[chrom])))
+        pretty_print("The estimated tree looks like: " + str(estimated_trees[chrom]))
+        pretty_print("The estimated tree looks like: " + str(convert_dict_tree_to_list(estimated_trees[chrom],total_epochs=pre+mid+post+(mid>=0)+(post>=0),is_truth=True)))
         if is_the_same_dict_tree_by_epoch_and_time_created(estimated_trees[chrom],simulated_trees[chrom]):
-            print("They are the same")
+            pretty_print("They are the same")
         else:
-            print("They are NOT the same")
+            pretty_print("They are NOT the same")
 
         tree_sim = count_nodes_with_same_copy_number(estimated_trees[chrom], simulated_trees[chrom])    
         num_chrom_with_correct_CN += tree_sim #== sim_tree_length)
         sim_tree_len = count_nodes(simulated_trees[chrom])
         total_nodes += sim_tree_len
-        print("In total there are " + str(tree_sim) + " nodes that have the exact same copy numbers out of " + 
+        pretty_print("In total there are " + str(tree_sim) + " nodes that have the exact same copy numbers out of " + 
                 str(sim_tree_len))
-        print("So this tree is " + str(int(float(tree_sim)*100/float(sim_tree_len))) + "% correct.")
+        pretty_print("So this tree is " + str(int(float(tree_sim)*100/float(sim_tree_len))) + "% correct.")
         tree_sim = count_nodes_with_same_properties(estimated_trees[chrom], simulated_trees[chrom])    
         num_chrom_with_correct_CN_and_epoch_created += tree_sim #== tree_sim_length)
 
-        print("In total there are " + str(tree_sim) + " nodes that have the exact same copy numbers and epochs created out of " + 
+        pretty_print("In total there are " + str(tree_sim) + " nodes that have the exact same copy numbers and epochs created out of " + 
                 str(sim_tree_len))
-        print("So this tree is " + str(int(float(tree_sim)*100/float(sim_tree_len))) + "% correct.")
+        pretty_print("So this tree is " + str(int(float(tree_sim)*100/float(sim_tree_len))) + "% correct.")
 
-        print("It is quite hard to get the tree exactly correct so of the nodes that are correct by copynumber sum the difference in epoch_created")
+        pretty_print("It is quite hard to get the tree exactly correct so of the nodes that are correct by copynumber sum the difference in epoch_created")
         tree_sim = sum_tree_distance(estimated_trees[chrom], simulated_trees[chrom],diff_struct_is_inf = False)
         average_distance_from_truth_of_epoch_created += float(tree_sim)/float(sim_tree_len)/23
-        print("The average distance per node is " + str(float(tree_sim)/float(sim_tree_len)))
+        pretty_print("The average distance per node is " + str(float(tree_sim)/float(sim_tree_len)))
 
 
-    print("The total number of nodes in the tree is:")
-    print(total_nodes)
+    pretty_print("The total number of nodes in the tree is:")
+    pretty_print(total_nodes)
 
-    print("The number of nodes that match the true tree structure and have the correct CNs in our best estimate is:")
-    print(num_chrom_with_correct_CN)
+    pretty_print("The number of nodes that match the true tree structure and have the correct CNs in our best estimate is:")
+    pretty_print(num_chrom_with_correct_CN)
 
-    print("The number of nodes that match the true tree structure and have the correct CNs AND the correct estimate for epoch created in our best estimate is:")
-    print(num_chrom_with_correct_CN_and_epoch_created)
+    pretty_print("The number of nodes that match the true tree structure and have the correct CNs AND the correct estimate for epoch created in our best estimate is:")
+    pretty_print(num_chrom_with_correct_CN_and_epoch_created)
 
-    print("The average distance of epoch created across all nodes to the true value is:")
-    print(average_distance_from_truth_of_epoch_created)
+    pretty_print("The average distance of epoch created across all nodes to the true value is:")
+    pretty_print(average_distance_from_truth_of_epoch_created)
 
     new_result = {"average_distance_from_truth_of_epoch_created":average_distance_from_truth_of_epoch_created,
             "num_chrom_with_correct_CN_and_epoch_created":num_chrom_with_correct_CN_and_epoch_created,
@@ -2295,6 +2303,8 @@ for result_index,res in enumerate(sorted(results)):
             "p_up":p_up,
             "p_down":p_down
             }
+    for key in new_result:
+        pretty_print(key+": "+str(new_result[key]))
 
     d = shelve.open('file3_'+str(test_case)+'.txt')           
     if 'all_results' in d:
