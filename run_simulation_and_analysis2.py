@@ -14,9 +14,10 @@ from more_itertools import locate
 from scipy.optimize import minimize_scalar
 
 def pretty_print(x):
+    max_len = 1000
     new_str = str(x)
-    if len(new_str) > 200:
-        new_str = new_str[:200]
+    if len(new_str) > max_len:
+        new_str = new_str[:max_len]
     print(new_str)
     return(None)
 
@@ -178,7 +179,7 @@ def simulate_single_with_poisson_timestamps_names(p_up,p_down,pre,mid,post,rate,
                     "parent" : -1, 
                     # the value of parent is the the parent chromosomes unique identifier, 
                     # the root node of each chromosomal tree is specified to be -1
-                    "epoch_created" : -1, 
+                    "epoch_created" : 0, 
                     # the epoch a chromosome is created, i
                     # both maternal and paternal chromosomes are created "before time" in epoch -1
                     "paternal" : (x == 0), 
@@ -1034,7 +1035,27 @@ def get_timings_per_tree(tree,epochs):
             # then it is the root node and there is no such thing as a timing for the first bifurcation
             # it is simply a natural split due to each person inheriting one of each CN
             timings = np.tile(timings, (1,1)) # this forces a potentially 1d array to be 2d
-            timings[:,label] = -1# 0 
+            timings[:,label] =  0 # CHANGE BACK to -1 
+
+###########WTF IS TIMINGS, need to understand this
+###########WTF IS TIMINGS, need to understand this
+###########WTF IS TIMINGS, need to understand this
+###########WTF IS TIMINGS, need to understand this
+###########WTF IS TIMINGS, need to understand this
+###########WTF IS TIMINGS, need to understand this
+###########WTF IS TIMINGS, need to understand this
+###########WTF IS TIMINGS, need to understand this
+###########WTF IS TIMINGS, need to understand this
+###########WTF IS TIMINGS, need to understand this
+###########WTF IS TIMINGS, need to understand this
+###########WTF IS TIMINGS, need to understand this
+###########WTF IS TIMINGS, need to understand this
+###########WTF IS TIMINGS, need to understand this
+###########WTF IS TIMINGS, need to understand this
+###########WTF IS TIMINGS, need to understand this
+###########WTF IS TIMINGS, need to understand this
+###########WTF IS TIMINGS, need to understand this
+###########WTF IS TIMINGS, need to understand this
 
         elif label_to_copy[str(label)] == 1:
             # then it is a leaf node and we can set it to be 
@@ -1190,7 +1211,7 @@ def timing_struct_to_BP_likelihood_per_chrom(data, trees_and_timings, pre, mid, 
     all_BP_likelihoods = []
 
     for these_tts in trees_and_timings:
-        #pretty_print(these_tts)
+        pretty_print(these_tts)
         if None in these_tts[3]:
             BP_likelihoods = -1
 
@@ -1198,7 +1219,7 @@ def timing_struct_to_BP_likelihood_per_chrom(data, trees_and_timings, pre, mid, 
             CNs, unique_CNs, branch_lengths, stacked_branch_lengths = get_branch_lengths(these_tts)
 
             path = []
-            if pre > -1:
+            if pre > 0:
                 path += ["A"]*pre
             if mid > -1:
                 path += ["GD"]
@@ -1209,14 +1230,16 @@ def timing_struct_to_BP_likelihood_per_chrom(data, trees_and_timings, pre, mid, 
             if post > 0:
                 path += ["A"]*post
 
-            #pretty_print("timings")
-            #pretty_print(these_tts)
+            print("path:"+str(path))
 
-            #pretty_print("copy numbers")
-            #pretty_print(CNs)
+            pretty_print("timings")
+            pretty_print(these_tts)
 
-            #pretty_print("branch lengths")
-            #pretty_print(branch_lengths)
+            pretty_print("copy numbers")
+            pretty_print(CNs)
+
+            pretty_print("branch lengths")
+            pretty_print(branch_lengths)
 
             #>>> data = pickle.load(open("pre_mat129_u65_d10.precomputed.pickle",'rb'))
             # in the keys are all the possible paths...
@@ -1267,21 +1290,21 @@ def timing_struct_to_BP_likelihood_per_chrom(data, trees_and_timings, pre, mid, 
                     paths[row][col] = path_code
                     likelihoods[row][col] = likelihood
 
-            #pretty_print("starts")
-            #pretty_print(starts)
-            #pretty_print("ends")
-            #pretty_print(ends)
-            #pretty_print("paths")
-            #pretty_print(paths)
-            #pretty_print("likelihoods")
-            #pretty_print(likelihoods)
+            pretty_print("starts")
+            pretty_print(starts)
+            pretty_print("ends")
+            pretty_print(ends)
+            pretty_print("paths")
+            pretty_print(paths)
+            pretty_print("likelihoods")
+            pretty_print(likelihoods)
 
             ll = np.log(likelihoods)
-            #pretty_print("loglikelihoods")
-            #pretty_print(ll)
+            pretty_print("loglikelihoods")
+            pretty_print(ll)
             BP_likelihoods = np.sum(ll[:,1:], axis=1)
-            #pretty_print("summed loglikelihoods")
-            #pretty_print(BP_likelihoods)
+            pretty_print("summed loglikelihoods")
+            pretty_print(BP_likelihoods)
 
         all_BP_likelihoods += [BP_likelihoods]
 
@@ -1394,6 +1417,9 @@ def get_all_poisson_loglikelihoods_per_chr(timings,plambda,BP_likelihoods,observ
 
 #@profile
 def find_best_SNV_likelihood(plambda, timings, BP_likelihoods):
+    print("plambda:"+str(plambda))
+    print("timings:"+str(timings))
+    print("BP_likelihoods:"+str(BP_likelihoods))
     SNV_likelihoods = {}
     best = {}
 
@@ -1451,12 +1477,15 @@ def find_BP_and_SNV_loglik(plambda_start, p_up_start, p_down_start, trees_and_ti
     #pretty_print(p_down_start)
     #pretty_print(window)
 
-    for p_up in range(max(0,p_up_start - p_window), min(100,p_up_start + p_window + 1)):
-        for p_down in range(max(0,p_down_start - p_window), min(100,p_down_start + p_window + 1)):
+    #for p_up in range(max(0,p_up_start - p_window), min(100,p_up_start + p_window + 1)):
+    #    for p_down in range(max(0,p_down_start - p_window), min(100,p_down_start + p_window + 1)):
+    # TEMP EDIT:
+    for p_up in [p_up_start]:
+        for p_down in [p_down_start]: 
             def optimize_func(plambda):
                 return BP_and_SNV_loglik(plambda, p_up, p_down, trees_and_timings, pre, mid, post)
 
-            bounds = (0, None)
+            #bounds = (0, None)
             bounds = (plambda_start*plambda_window, plambda_start/plambda_window)
             x0 = plambda_start
 
@@ -1468,10 +1497,10 @@ def find_BP_and_SNV_loglik(plambda_start, p_up_start, p_down_start, trees_and_ti
                 best_p_down = p_down
                 best_plambda = res.x
 
-                pretty_print("Best Log-Likelihood:", best_loglik)
-                pretty_print("Best p_up:", best_p_up)
-                pretty_print("Best p_down:", best_p_down)
-                pretty_print("Best plambda:", best_plambda)
+                pretty_print(("Best Log-Likelihood:", best_loglik))
+                pretty_print(("Best p_up:", best_p_up))
+                pretty_print(("Best p_down:", best_p_down))
+                pretty_print(("Best plambda:", best_plambda))
 
     # You can also use other optimization methods such as SLSQP, Nelder-Mead, Powell, COBYLA, TNC, BFGS, etc, as specified by the method argument.
 
@@ -1778,8 +1807,8 @@ def filter_tree(tree, keys_to_keep):
 ##### 
 
 pretty_print("START")
-#test_case = 1 #sys.argv[1]
-test_case = 10000 #sys.argv[1]
+test_case = sys.argv[1]
+#test_case = 10000 #sys.argv[1]
 do_simulation = False 
 do_simulation = True 
 
@@ -1812,9 +1841,9 @@ def biased_sample(p,min_value,max_value):
 
 # the parameters that generated the simulation:
 max_epochs = 4
-pre = 1 #random.randint(0,max_epochs) 
-mid = 0 #biased_sample(0.5,-1,max_epochs) #-1 
-post = -1 #biased_sample(0.8,-1,max_epochs)
+pre = random.randint(0,max_epochs) 
+mid = biased_sample(0.5,-1,max_epochs) #-1 
+post = biased_sample(0.8,-1,max_epochs)
 
 if mid == -1 and post >=0:
     temp = mid
@@ -1823,9 +1852,9 @@ if mid == -1 and post >=0:
 
 
 total_epochs = pre+mid+post+(pre>=0)+(mid>=0)
-p_up = 0.2 #random_decimal(0.00,0.30,2) #0.13
-p_down = 0.2 #random_decimal(p_up*0.5,min(0.3,p_up*2),2) #0.13
-rate = 100 #random_integer_log_scale(10,100000) #100
+p_up = random_decimal(0.00,0.30,2) #0.13
+p_down = random_decimal(p_up*0.5,min(0.3,p_up*2),2) #0.13
+rate = random_integer_log_scale(100,100000) #100
 
 pretty_print("SIMULATION PARAMETERS ARE: ")
 pretty_print("pre: "+ str(pre))
@@ -2030,6 +2059,9 @@ if do_search:
     results = []
     all_trees_and_timings = []
     for res in range(SEARCH_DEPTH+1):
+        print("############################\n"*10)
+        print(res)
+
         if res == SEARCH_DEPTH:
             p_up = int(real_p_up*100)
             p_down = int(real_p_down*100)
@@ -2057,13 +2089,18 @@ if do_search:
             )
 
         pretty_print("investigate the problem")
+        print("print the trees and timings info")
         for chrom in trees_and_timings:
             pretty_print(chrom)
-            if len(trees_and_timings[chrom]) < 1:
-                pretty_print(trees_and_timings[chrom])
+            pretty_print(trees_and_timings[chrom])
 
+        #for chrom in trees_and_timings:
+        #    assert(len(trees_and_timings[chrom]) >= 1)
+        # surprisingly this may not be true?
         for chrom in trees_and_timings:
-            assert(len(trees_and_timings[chrom]) >= 1)
+            if len(trees_and_timings[chrom]) == 0:
+                continue
+
 
 
         # need to take the rpinting of information out of the functions and into this main function only
@@ -2079,13 +2116,15 @@ if do_search:
     
 
         pretty_print("SELECT the best estimates")
-        total_time = 0 # rtotal time refers to the number of epochs under which SNVs evolve.
-        if pre > 0:
-            total_time += pre
-        if mid > 0:
-            total_time += mid
-        if post > 0:
-            total_time += post
+        #total_SNV_time = 0 # rtotal time refers to the number of epochs under which SNVs evolve.
+        #if pre > 0:
+        #    total_SNV_time += pre
+        #if mid > 0:
+        #    total_SNV_time += mid
+        #if post > 0:
+        #    total_SNV_time += post
+        total_SNV_time = pre+mid+post+2+1 # SNVs occur every round not just in anueploidy rounds so the above commented code is wrong
+        # BUT it also occurs in the first round when nothing happens, so we also add a plus one
 
         total_SNVs = sum_SNV_counts(observed_SNV_multiplicities)
         pretty_print("total SNVs")
@@ -2094,10 +2133,8 @@ if do_search:
         pretty_print(observed_SNV_multiplicities)
 
         total_chromosomes = sum_chrom_multiplicities(observed_CN_multiplicities)
-        plambda_start = total_SNVs / total_time / total_chromosomes * 23
+        plambda_start = float(total_SNVs) / float(total_SNV_time) / float(total_chromosomes) * 23
         pretty_print("plambda_start: " + str(plambda_start))  
-        if plambda_start == 0:
-            sys.exit()
         # this is a very rough estimate of expected value but it should align with the optimised for value. 
         # and this should be checked at some point and this line removed once checked
 
@@ -2105,7 +2142,7 @@ if do_search:
         p_up_start = p_up
         p_down_start = p_down
 
-        best_loglik, best_p_up, best_p_down, best_plambda, result = find_BP_and_SNV_loglik(
+        BP_SNV_output = find_BP_and_SNV_loglik(
                 plambda_start = plambda_start, 
                 p_up_start = p_up_start, 
                 p_down_start = p_down_start, 
@@ -2117,7 +2154,10 @@ if do_search:
                 plambda_window = plambda_window
                 )
 
-        pretty_print(res)
+        best_loglik, best_p_up, best_p_down, best_plambda, result = BP_SNV_output
+        print("BP_SNV_output")
+        print(BP_SNV_output)
+        
         results += [[best_loglik, pre, mid, post, best_p_up, best_p_down, best_plambda, result]]
         all_trees_and_timings += [trees_and_timings] 
         #d = shelve.open('file2.txt')
@@ -2133,6 +2173,11 @@ else:
     all_trees_and_timings = d['trees_and_timings']
     d.close()
     # at some point evaluate the relative value of the likelihood contributed from the BP model to the likelihood contributed by the SNV model
+
+print(results)
+print(all_trees_and_timings)
+
+sys.exit()
 
 def order_tree_keys_alphabetically(tree):
     ordered_tree = {}
