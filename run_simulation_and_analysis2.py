@@ -2031,6 +2031,7 @@ if do_search:
             mid = real_mid
             post = real_post
             path = get_ev_string(pre,mid,post) 
+            # ok paths here now
 
         else:
             path = searchable_likelihoods["path"].iloc[res]
