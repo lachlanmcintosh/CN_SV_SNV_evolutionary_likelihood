@@ -1,11 +1,13 @@
 #!/bin/bash
 
-for rep in {0..0}
+for rep in {1..4}
 do
   for i in {0..400}
   do
-    sbatch ./simulation_singlecore.sh $i
+    j=$(( $i*$rep ))
+    echo $j
+    sbatch ./simulation_singlecore.sh $j
   done
-  sleep 60
+  sleep 5000 
 done
 

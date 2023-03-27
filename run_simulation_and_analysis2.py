@@ -1255,10 +1255,9 @@ def timing_struct_to_BP_likelihood_per_chrom(data, trees_and_timings, pre, mid, 
                 for col in range(branch_lengths.shape[1]):
                     these_paths = path[starts[row][col]:ends[row][col]]
                     path_code = get_path_code(these_paths)
-                    if path_code not in data: # not sure why the path code is sometimes not in data...
+                    if path_code not in data:
                         print(path_code)
-                        sys.exit()
-                        continue # This is just to try and prevent an error, I have no idea, and it could be a major problem
+                        assert(path_code in data) # not sure why the path code is sometimes not in data...
                     ######## CHECK BACK HERE
                     ######## CHECK BACK HERE
                     ######## CHECK BACK HERE
@@ -1876,7 +1875,7 @@ real_rate = rate
 
 # the parameters that govern the search depth:
 
-top = 1 # 10# top describes how many of the top solutions to go through
+top = 10# top describes how many of the top solutions to go through
 p_window = 0
 plambda_window = 0.1
 
@@ -1886,7 +1885,7 @@ pretty_print("additive window width to search around top estimates of enuploidy 
 pretty_print("multiplicative window width to search around top estimates of the poisson parameter: " + str(p_window))
 
 
-max_default_path_length = 0 #2
+max_default_path_length = 2 #2
 default_paths = [str(x) for x in range(max_default_path_length)]
 default_paths += [str(x) + "G" + str(y) 
         for x in range(max_default_path_length) 
@@ -2177,7 +2176,6 @@ else:
 print(results)
 print(all_trees_and_timings)
 
-sys.exit()
 
 def order_tree_keys_alphabetically(tree):
     ordered_tree = {}
