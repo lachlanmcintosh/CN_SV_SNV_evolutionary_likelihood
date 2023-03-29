@@ -1,4 +1,4 @@
-
+import numpy as np
 import glob
 import os
 import shelve
@@ -28,6 +28,9 @@ def convert_dict_tree_to_list(tree,total_epochs=None,is_truth=False):
 
 files = glob.glob("file3_*.txt.dir")
 
+pattern = "file3_[0-9]*[0-9].txt"
+filepaths = glob.glob(pattern)
+
 wildcard_values = []
 
 for file in files:
@@ -40,6 +43,8 @@ wildcard_values = sorted(wildcard_values, key=lambda x: x[1])
 sorted_values = [val[0] for val in wildcard_values]
 
 print(sorted_values)
+def sort_dicts_by_aic(dicts):
+    return sorted(dicts, key=lambda x: x['AIC'])
 
 def sort_dicts_by_val(dicts_list):
     return sorted(dicts_list, key=lambda x: x['val'])
@@ -80,6 +85,8 @@ def add_ev_strings_and_counts_to_dicts(dicts_list):
 def create_3x3_grid(dicts_list):
     grid = np.zeros((3, 3))
     for d in dicts_list:
+        if d == None:
+            continue
         gd = d['genome_doublings']
         gd_est = d['genome_doublings_est']
         if gd < 3 and gd_est < 3:
@@ -100,21 +107,20 @@ def find_matching_ev_strings_index(dicts_list):
     return -1  # Indicates that no matching entry was found
 
 
-def get_all_best_estiamtes(list_of_lists):
+def get_all_best_estimates(list_of_lists):
     return [x[0] for x in list_of_lists]
     
-def get_all_true_estiamtes(list_of_lists):
+def get_all_true_estimates(list_of_lists):
     results = []
-    for x in list of lists:
+    for x in list_of_lists:
         index_matching_ev_string = find_matching_ev_strings_index(x)
         if index_matching_ev_string != -1:
-            results += x[index_matching_ev_string]
+            results += [list_of_lists[index_matching_ev_string]]
         else:
-            results += None
- 
+            results += [None]
     return results
 
-def add_aic_to_dicts(dicts, num_parameters):
+def add_aic_to_dicts(dicts):
     for d in dicts:
         num_parameters = d['genome_doublings_est'] + 3
         neg_log_likelihood = d['val']
@@ -124,73 +130,99 @@ def add_aic_to_dicts(dicts, num_parameters):
 
 
 count = 0
+list_of_lists = []
 for test_case in sorted_values:
     print(test_case)
     
     d = shelve.open('file3_'+str(test_case)+'.txt')
-    print(d.keys())
     if len(list(d.keys())) > 0:
         all_results = d['all_results']
         print("length of results:"+str(len(all_results.keys())))
+        all_results = [all_results[x] for x in all_results]
+        all_results = add_ev_strings_and_counts_to_dicts(all_results)
+        all_results = add_aic_to_dicts(all_results)
+        all_results = sort_dicts_by_aic(all_results)
         
         #key = "0"
         #if True: #all_results[key]["val"] != "inf": 
-        for key in all_results:
-            print("key:" + str(key))
-            #print(all_results[key])
+        for result in all_results:
+            pre = result["pre"]
+            mid = result["mid"]
+            post = result["post"]
+            p_up = result["p_up"]
+            p_down = result["p_down"]
 
-            pre = all_results[key]["pre"]
-            mid = all_results[key]["mid"]
-            post = all_results[key]["post"]
-            p_up = all_results[key]["p_up"]
-            p_down = all_results[key]["p_down"]
-            #plambda = all_results[key]["plambda"]
-
-            pre_est = all_results[key]["pre_est"]
-            mid_est = all_results[key]["mid_est"]
-            post_est = all_results[key]["post_est"]
-            p_up_est = all_results[key]["p_up_est"]
-            p_down_est = all_results[key]["p_down_est"]
-            #plambda_est = all_results[key]["plambda_est"]
+            pre_est = result["pre_est"]
+            mid_est = result["mid_est"]
+            post_est = result["post_est"]
+            p_up_est = result["p_up_est"]
+            p_down_est = result["p_down_est"]
 
             print("(truth,estimated)")
             print("pre:"+str((pre,pre_est)))
             print("mid:"+str((mid,mid_est)))
             print("post:"+str((post,post_est)))
             print("p_up:"+str((p_up,p_up_est)))
-            print("p_down:"+str((p_down,p_down_est)))
-            #print("plambda:"+str((plambda,plambda_est)))
+            print("p_down:"+str((p_down,p_down_est))) 
 
-            val = all_results[key]["val"]
+            val = result["val"]
             print("val:"+str(val))
+            print("AIC:"+str(result["AIC"]))
+            print("ev_string:"+str(result["ev_str"]))
 
+            total_epochs = result["total_epochs"] 
+            est = result["estimated_trees"]
+            sim = result["simulated_trees"]
 
-            total_epochs = all_results[key]["total_epochs"] #pre+mid+post+(pre>=0)+(post>=0)
-
-
-            est = all_results[key]["estimated_trees"]
-            sim = all_results[key]["simulated_trees"]
             #for chrom in est:
             #    print(convert_dict_tree_to_list(est[chrom]))
             #    print(convert_dict_tree_to_list(sim[chrom]))
 
         count += 1
 
-        if count >= 10:
-            break
+        #if count >= 10:
+        #    break
 
+    list_of_lists += [all_results]
     d.close()
 
-#for test_case in sorted_values:
-#    print(test_case)
-#    d = shelve.open('file3_'+str(test_case)+'.txt')
-#    if len(list(d.keys())) > 0:
-#        all_results = d['all_results']
-#        val_key_pairs = [(all_results[key]["val"],key) for key in all_results] 
-#
-#        best_key = sorted(val_key_pairs)[0][1]
-	
+def top_n_lists_by_best_aic(lists_of_dicts, n):
+    sorted_lists = sorted(lists_of_dicts, key=lambda l: min(d['AIC'] for d in l))
+    return sorted_lists[:n]
 
 
-	
+import random
+
+def filter_lists_by_ev_str(lists_of_dicts, p):
+    filtered_lists = [
+            list_of_dicts for list_of_dicts in lists_of_dicts
+            if list_of_dicts[0]['ev_str_est'] == list_of_dicts[0]['ev_str'] or random.random() < p 
+    ]
+    return filtered_lists
+    #return [l for l in filtered_lists if l]  # Remove empty lists
+
+# Example usage
+#filtered_lists = filter_lists_by_ev_str(your_lists_of_dicts, 0.5)
+
+print("RAW")
+all_true_estimates = get_all_true_estimates(list_of_lists)
+all_best_estimates = get_all_best_estimates(list_of_lists)
+
+print("BEST ESTIMATED")
+print(create_3x3_grid(all_best_estimates))
+print("IF ONLY TRUTH EXISTED")
+print(create_3x3_grid(all_true_estimates))
+
+
+list_of_lists = filter_lists_by_ev_str(list_of_lists,0.2)
+all_true_estimates = get_all_true_estimates(list_of_lists)
+all_best_estimates = get_all_best_estimates(list_of_lists)
+
+print("BEST ESTIMATED")
+print(create_3x3_grid(all_best_estimates))
+print("IF ONLY TRUTH EXISTED")
+print(create_3x3_grid(all_true_estimates))
+
+GD_indexes = [find_matching_genome_doublings_index(x) for x in list_of_lists]
+path_indexes = [find_matching_ev_strings_index(x) for x in list_of_lists]
 
