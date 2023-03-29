@@ -1,13 +1,14 @@
 #!/bin/bash
 
-for rep in {1..4}
+atatime=400
+reps=40
+for rep in $(seq 1 $reps)
 do
-  for i in {0..400}
+  for i in $(seq 0 $atatime)
   do
-    j=$(( $i*$rep ))
+    j=$(( i+atatime*rep ))
     echo $j
     sbatch ./simulation_singlecore.sh $j
   done
-  sleep 5000 
+  sleep 5000
 done
-
