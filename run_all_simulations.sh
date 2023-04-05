@@ -1,14 +1,18 @@
 #!/bin/bash
 
-atatime=400
-reps=40
-for rep in $(seq 1 $reps)
+atatime=20
+reps=1
+total_jobs=$((atatime * reps))
+
+# Submit the array job
+sbatch --array=1-${total_jobs} ./simulation_singlecore.sh
+
+# Sleep between repetitions if required
+for rep in $(seq 2 $reps)
 do
-  for i in $(seq 0 $atatime)
-  do
-    j=$(( i+atatime*rep ))
-    echo $j
-    sbatch ./simulation_singlecore.sh $j
-  done
-  sleep 5000
+  sleep 7200
+  start_index=$((atatime * (rep - 1) + 1))
+  end_index=$((atatime * rep))
+  sbatch --array=${start_index}-${end_index} ./simulation_singlecore.sh
+  #sbatch --array=$((atatime * (rep - 1) + 1))-${total_jobs} ./simulation_singlecore.sh
 done

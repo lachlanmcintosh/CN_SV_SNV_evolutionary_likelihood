@@ -14,7 +14,7 @@ from more_itertools import locate
 from scipy.optimize import minimize_scalar
 
 def pretty_print(x):
-    max_len = 1000
+    max_len = 10000
     new_str = str(x)
     if len(new_str) > max_len:
         new_str = new_str[:max_len]
@@ -181,7 +181,7 @@ def simulate_single_with_poisson_timestamps_names(p_up,p_down,pre,mid,post,rate,
                     # the root node of each chromosomal tree is specified to be -1
                     "epoch_created" : 0, 
                     # the epoch a chromosome is created, i
-                    # both maternal and paternal chromosomes are created "before time" in epoch -1
+                    # both maternal and paternal chromosomes are created at the begining 
                     "paternal" : (x == 0), 
                     # True if paternal, False if maternal 
                     "SNVs":[], 
@@ -388,8 +388,12 @@ def insert_node_into_truth_tree(tree,node):
         if tree["child"] == None:
             tree["complement"] = copy.deepcopy(tree)
             tree["complement"]["epoch_created"] = node["epoch_created"]
-            if node["parent"] == -1:
+
+            # UNSURE, the following two lines i am unsure about
+            if node["parent"] == -1: # the root node of every chromosomal tree has a unique identifier of 1 
                 tree["complement"]["copy_number"] = 0
+		# it seems that this copynumber get overwritten if another node is found to have a parent of -1 below
+
             # because tree is already a copy of itself if should already have child and complement set to None
             #assert(tree["complement"]["child"] == None)
             #assert(tree["complement"]["complement"] == None)
@@ -400,7 +404,8 @@ def insert_node_into_truth_tree(tree,node):
 
 
         else:
-            if node["parent"] == -1: # 
+            # then we need to insert into the complement if it is the correct node or further downt he tree
+            if node["parent"] == -1: # then it is nested directly under the parent 
                 assert(node["unique_identifier"] < 46)
                 tree["complement"] = copy.deepcopy(node)
                 tree["complement"]["child"] = None
@@ -408,6 +413,7 @@ def insert_node_into_truth_tree(tree,node):
                 assert("copy_number" not in  tree["complement"])
             else:
                 # this is what needs to be fixed i think?
+                # if tree complement is
                 if tree["complement"] is None:
                     tree["complement"] = copy.deepcopy(node)
                     tree["complement"]["child"] = None
@@ -423,6 +429,45 @@ def insert_node_into_truth_tree(tree,node):
             tree["complement"] = insert_node_into_truth_tree(tree["complement"],node)
 
     return(tree)
+
+def insert_node_into_truth_tree_v2(tree, node):
+    assert(node["unique_identifier"] != tree["unique_identifier"])
+
+    if node["parent"] == tree["unique_identifier"]:
+        # then the node must be inserted here
+        if tree["child"] is None:
+            # either under child
+            tree["complement"] = copy.deepcopy(tree)
+            tree["complement"]["epoch_created"] = node["epoch_created"]
+
+            tree["child"] = copy.deepcopy(node)
+            tree["child"]["child"] = None
+            tree["child"]["complement"] = None
+
+        else:
+            # or under the complement
+            if node["parent"] == -1:
+                # need to force it if maternal or paternal as the root node is ficticious
+                assert(node["unique_identifier"] < 46)
+                tree["complement"] = copy.deepcopy(node)
+                tree["complement"]["child"] = None
+                tree["complement"]["complement"] = None
+                assert("copy_number" not in tree["complement"])
+
+            else:
+                # otherwise we insert it further down into the complement
+                tree["complement"] = insert_node_into_truth_tree_v2(tree["complement"], node)
+
+    else:
+        # then we don't know where the node needs to be inserted and need to find that location:
+        if tree["child"] is not None:
+            tree["child"] = insert_node_into_truth_tree_v2(tree["child"], node)
+
+        if tree["complement"] is not None:
+            tree["complement"] = insert_node_into_truth_tree_v2(tree["complement"], node)
+
+    return tree
+
 
 
 # now that the truth tree is created for each chromosomes,
@@ -498,7 +543,7 @@ def remove_SNVs_from_tree(tree):
 
 # code to remove all dead nodes in the tree while also updating the parent field of the removed node's children to the parent of the removed node:
 #n@profile
-def remove_dead_nodes(tree):
+def remove_dead_nodes_old(tree):
     if tree is None:
         return None
 
@@ -507,12 +552,12 @@ def remove_dead_nodes(tree):
         while True:
             if tree.get('child') is not None and tree['child'].get('dead'):
                 parent = tree["parent"]
-                tree = tree['complement']
+                tree = copy.deepcopy(tree['complement'])
                 tree["parent"] = parent
 
             elif tree.get('complement') is not None and tree['complement'].get('dead'):
                 parent = tree["parent"]
-                tree = tree['child']
+                tree = copy.deepcopy(tree['child'])
                 tree["parent"] = parent
 
             else:
@@ -526,6 +571,72 @@ def remove_dead_nodes(tree):
         tree['complement'] = remove_dead_nodes(tree['complement'])
 
     return tree
+
+def remove_dead_nodes_old2(tree):
+    if tree is None:
+        return None
+
+    # Check and update the child and complement of the current node recursively
+    if tree.get('child') is not None:
+        tree['child'] = remove_dead_nodes(tree['child'])
+
+    if tree.get('complement') is not None:
+        tree['complement'] = remove_dead_nodes(tree['complement'])
+
+    # If the current node is dead, replace it with the non-dead child or complement if available,
+    # and raise an error if both its children are not dead
+    if tree.get('dead') is True:
+        if tree.get('child') is not None and tree.get('complement') is not None:
+            raise ValueError("A dead node has both child and complement not dead.")
+
+        parent = tree.get('parent')
+
+        if tree.get('child') is not None:
+            tree['child']['parent'] = parent
+            return tree['child']
+        elif tree.get('complement') is not None:
+            tree['complement']['parent'] = parent
+            return tree['complement']
+        else:
+            return None
+
+    return tree
+
+def remove_dead_nodes(tree):
+    if tree is None:
+        return None
+
+    # Check and update the child and complement of the current node recursively
+    if tree.get('child') is not None:
+        tree['child'] = remove_dead_nodes(tree['child'])
+
+    if tree.get('complement') is not None:
+        tree['complement'] = remove_dead_nodes(tree['complement'])
+
+    # If the current node is dead and it's not the topmost node,
+    # or its parent value is -1 and its children have non-dead nodes,
+    # replace it with the non-dead child or complement if available,
+    # and raise an error if both its children are not dead
+    should_remove_dead_node = (
+        tree.get('dead') is True and 
+        (tree.get('parent') != -1 or (tree.get('parent') == -1 and (tree.get('child') is not None or tree.get('complement') is not None)))
+    )
+
+    if should_remove_dead_node:
+        if tree.get('child') is not None and tree.get('complement') is not None:
+            raise ValueError("A dead node has both child and complement not dead.")
+
+        parent = tree.get('parent')
+
+        if tree.get('child') is not None:
+            tree['child']['parent'] = parent
+            return tree['child']
+        elif tree.get('complement') is not None:
+            tree['complement']['parent'] = parent
+            return tree['complement']
+
+    return tree
+
 
 # The function takes in the tree as an argument and checks if the current node is dead or not. 
 # If it is dead, the function moves the children of that node up to the parent of the dead node, by updating their parent field to be the same as the parent field of the dead node. 
@@ -554,7 +665,7 @@ def create_truth_trees(simulated_chromosomes):
 
         # insert all nodes and add metadat to tree and simplify:
         for new_node in sorted_list:
-            trees[chrom_type] = insert_node_into_truth_tree(tree,new_node[1])
+            trees[chrom_type] = insert_node_into_truth_tree_v2(tree,new_node[1])  # UNSURE EDIT
         for i in range(5):
             pretty_print("##### chrom_type:"+str(chrom_type))
         pretty_print("with nodes inserted:")
@@ -1838,44 +1949,9 @@ def biased_sample(p,min_value,max_value):
     else:
         return random.randint(min_value + 1, max_value)
 
-# the parameters that generated the simulation:
-max_epochs = 4
-pre = random.randint(0,max_epochs) 
-mid = biased_sample(0.5,-1,max_epochs) #-1 
-post = biased_sample(0.8,-1,max_epochs)
-
-if mid == -1 and post >=0:
-    temp = mid
-    mid = -1
-    post = temp
-
-
-total_epochs = pre+mid+post+(pre>=0)+(mid>=0)
-p_up = random_decimal(0.00,0.30,2) #0.13
-p_down = random_decimal(p_up*0.5,min(0.3,p_up*2),2) #0.13
-rate = random_integer_log_scale(100,100000) #100
-
-pretty_print("SIMULATION PARAMETERS ARE: ")
-pretty_print("pre: "+ str(pre))
-pretty_print("mid: "+ str(mid))
-pretty_print("post: " + str(post))
-pretty_print("p_up: " + str(p_up))
-pretty_print("p_down: " + str(p_down))
-pretty_print("rate: " + str(rate))
-pretty_print("")
-
-
-# save the true parameters because there are name collisions:
-real_pre = pre
-real_mid = mid
-real_post = post
-real_p_up = p_up
-real_p_down = p_down
-real_rate = rate
 
 # the parameters that govern the search depth:
-
-top = 10# top describes how many of the top solutions to go through
+top = 2# top describes how many of the top solutions to go through
 p_window = 0
 plambda_window = 0.1
 
@@ -1885,7 +1961,7 @@ pretty_print("additive window width to search around top estimates of enuploidy 
 pretty_print("multiplicative window width to search around top estimates of the poisson parameter: " + str(p_window))
 
 
-max_default_path_length = 2 #2
+max_default_path_length = 0 #2
 default_paths = [str(x) for x in range(max_default_path_length)]
 default_paths += [str(x) + "G" + str(y) 
         for x in range(max_default_path_length) 
@@ -1900,6 +1976,43 @@ pretty_print(len(default_paths))
 
 if do_simulation:
     pretty_print("Doing simulation")
+    # the parameters that generated the simulation:
+    max_epochs = 4
+    pre = random.randint(0,max_epochs) 
+    mid = biased_sample(0.5,-1,max_epochs) #-1 
+    post = biased_sample(0.8,-1,max_epochs)
+
+    if mid == -1 and post >=0:
+        temp = mid
+        mid = -1
+        post = temp
+
+
+    total_epochs = pre+mid+post+(pre>=0)+(mid>=0)
+    p_up = random_decimal(0.10,0.30,2) #0.13
+    p_down = random_decimal(p_up*0.5,min(0.3,p_up*2),2) #0.13
+    rate = 10 #random_integer_log_scale(100,100000) #100
+    # a low rate helps for debugging purposes...
+
+    pretty_print("SIMULATION PARAMETERS ARE: ")
+    pretty_print("pre: "+ str(pre))
+    pretty_print("mid: "+ str(mid))
+    pretty_print("post: " + str(post))
+    pretty_print("p_up: " + str(p_up))
+    pretty_print("p_down: " + str(p_down))
+    pretty_print("rate: " + str(rate))
+    pretty_print("")
+
+
+    # save the true parameters because there are name collisions:
+    real_pre = pre
+    real_mid = mid
+    real_post = post
+    real_p_up = p_up
+    real_p_down = p_down
+    real_rate = rate
+
+
     simulated_chromosomes = simulate_single_with_poisson_timestamps_names(
             p_up=p_up, 
             p_down=p_down, 
@@ -1957,7 +2070,7 @@ if do_simulation:
     searchable_likelihoods = pd.concat([top_likelihoods,marginal_likelihoods], ignore_index=True)
     searchable_likelihoods = searchable_likelihoods.drop_duplicates(subset=['path','p_up','p_down'], keep='first')
     searchable_likelihoods = searchable_likelihoods.sort_values(by='path')
-    searchable_likelihoods = searchable_likelihoods[searchable_likelihoods['likelihood'] > 1e-9]
+    #searchable_likelihoods = searchable_likelihoods[searchable_likelihoods['likelihood'] > 1e-9]
 
     pretty_print("The best likelihoods are:")
     pretty_print(searchable_likelihoods)
@@ -1977,6 +2090,12 @@ if do_simulation:
         d['marginal_likelihoods'] = marginal_likelihoods
         d['top_likelihoods'] = top_likelihoods
         d['searchable_likelihoods'] = searchable_likelihoods
+        d['pre'] = pre
+        d['mid'] = mid
+        d['post'] = post
+        d['p_up'] = p_up
+        d['p_down'] = p_down
+        d['rate'] = rate
         d.close()
 
 if not do_simulation:
@@ -1992,6 +2111,19 @@ if not do_simulation:
     marginal_likelihoods = d['marginal_likelihoods']
     top_likelihoods = d['top_likelihoods']
     searchable_likelihoods = d['searchable_likelihoods']
+    pre = d['pre']
+    real_pre = pre
+    mid = d['mid']
+    real_mid = mid
+    post = d['post']
+    real_post = post
+    p_up = d['p_up']
+    real_p_up = p_up
+    p_down = d['p_down']
+    real_p_down = p_down
+    rate = d['rate']
+    real_rate = rate
+
 
     pretty_print("simulated_chromsomes")
     pretty_print(simulated_chromosomes)
@@ -2101,18 +2233,6 @@ if do_search:
                 continue
 
 
-
-        # need to take the rpinting of information out of the functions and into this main function only
-        # if information needs to be printed then it needs to be able to be printed from this function here
-
-        # from scipy.optimize import NonlinearConstraint, Bounds
-        # output = scipy.optimize.minimize(fun=objective_function_SNV_loglik,x0=5,args=(timings))
-        # output = scipy.optimize.differential_evolution(func=objective_function_SNV_loglik,bounds=Bounds([0.], [20.]),args=(timings))
-        # need to reintroduce some sort of non array search for both the rate parameter AND p_up AND p_down
-
-        # put branch lengths here, they are getting passed in to both comput ehte SNV likelihood and the BP likelihoods below
-        # should not create the exact same data structure twice
-    
 
         pretty_print("SELECT the best estimates")
         #total_SNV_time = 0 # rtotal time refers to the number of epochs under which SNVs evolve.
@@ -2339,12 +2459,12 @@ for result_index,res in enumerate(sorted(results)):
             "BP_likelihoods":BP_likelihoods,
             "total_SNV_likelihood":total,
             "best_SNV_likelihood":best,
-            "pre":pre,
-            "mid":mid,
-            "post":post,
+            "pre":pre_real,
+            "mid":mid_real,
+            "post":post_real,
             "total_epochs":total_epochs,
-            "p_up":p_up,
-            "p_down":p_down
+            "p_up":p_up_real,
+            "p_down":p_down_real
             }
     for key in new_result:
         pretty_print(key+": "+str(new_result[key]))

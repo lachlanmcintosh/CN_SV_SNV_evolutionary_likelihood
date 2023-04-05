@@ -25,26 +25,29 @@ def convert_dict_tree_to_list(tree,total_epochs=None,is_truth=False):
         return [(copy_number, epoch_created)]
     return [(copy_number, epoch_created), child_tree, complement_tree]
 
+def get_filenames_sorted_by_time():
+    files = glob.glob("file3_*.txt.dir")
 
-files = glob.glob("file3_*.txt.dir")
+    wildcard_values = []
 
-pattern = "file3_[0-9]*[0-9].txt"
-filepaths = glob.glob(pattern)
+    for file in files:
+        wildcard_value = os.path.splitext(os.path.basename(file))[0].split("_")[1].split(".")[0]
+        creation_time = os.path.getctime(file)
+        wildcard_values.append((wildcard_value, creation_time))
 
-wildcard_values = []
+    wildcard_values = sorted(wildcard_values, key=lambda x: x[1])
 
-for file in files:
-    wildcard_value = os.path.splitext(os.path.basename(file))[0].split("_")[1].split(".")[0]
-    creation_time = os.path.getctime(file)
-    wildcard_values.append((wildcard_value, creation_time))
+    sorted_values = [val[0] for val in wildcard_values]
 
-wildcard_values = sorted(wildcard_values, key=lambda x: x[1])
+    return sorted_values
 
-sorted_values = [val[0] for val in wildcard_values]
+# Example usage:
 
-print(sorted_values)
 def sort_dicts_by_aic(dicts):
     return sorted(dicts, key=lambda x: x['AIC'])
+
+def sort_dicts_by_worst_aic(dicts):
+    return sorted(dicts, key=lambda x: -x['AIC'])
 
 def sort_dicts_by_val(dicts_list):
     return sorted(dicts_list, key=lambda x: x['val'])
@@ -129,62 +132,53 @@ def add_aic_to_dicts(dicts):
     return dicts 
 
 
-count = 0
-list_of_lists = []
-for test_case in sorted_values:
-    print(test_case)
-    
-    d = shelve.open('file3_'+str(test_case)+'.txt')
-    if len(list(d.keys())) > 0:
-        all_results = d['all_results']
-        print("length of results:"+str(len(all_results.keys())))
-        all_results = [all_results[x] for x in all_results]
-        all_results = add_ev_strings_and_counts_to_dicts(all_results)
-        all_results = add_aic_to_dicts(all_results)
-        all_results = sort_dicts_by_aic(all_results)
-        
-        #key = "0"
-        #if True: #all_results[key]["val"] != "inf": 
-        for result in all_results:
-            pre = result["pre"]
-            mid = result["mid"]
-            post = result["post"]
-            p_up = result["p_up"]
-            p_down = result["p_down"]
+import shelve
 
-            pre_est = result["pre_est"]
-            mid_est = result["mid_est"]
-            post_est = result["post_est"]
-            p_up_est = result["p_up_est"]
-            p_down_est = result["p_down_est"]
+def process_test_cases(sorted_values):
+    count = 0
+    list_of_lists = []
 
-            print("(truth,estimated)")
-            print("pre:"+str((pre,pre_est)))
-            print("mid:"+str((mid,mid_est)))
-            print("post:"+str((post,post_est)))
-            print("p_up:"+str((p_up,p_up_est)))
-            print("p_down:"+str((p_down,p_down_est))) 
+    for test_case in sorted_values:
+        print(test_case)
 
-            val = result["val"]
-            print("val:"+str(val))
-            print("AIC:"+str(result["AIC"]))
-            print("ev_string:"+str(result["ev_str"]))
+        d = shelve.open('file3_' + str(test_case) + '.txt')
+        if len(list(d.keys())) > 0:
+            all_results = d['all_results']
 
-            total_epochs = result["total_epochs"] 
-            est = result["estimated_trees"]
-            sim = result["simulated_trees"]
+            print("length of results:" + str(len(all_results.keys())))
+            all_results = [all_results[x] for x in all_results]
+            for result in all_results:
+                result['test_case'] = test_case
 
-            #for chrom in est:
-            #    print(convert_dict_tree_to_list(est[chrom]))
-            #    print(convert_dict_tree_to_list(sim[chrom]))
+            all_results = add_ev_strings_and_counts_to_dicts(all_results)
+            all_results = add_aic_to_dicts(all_results)
+            all_results = sort_dicts_by_aic(all_results)
 
-        count += 1
+            for result in all_results:
+                print_result_info(result)
 
-        #if count >= 10:
-        #    break
+            count += 1
 
-    list_of_lists += [all_results]
-    d.close()
+        list_of_lists += [all_results]
+        d.close()
+
+    return list_of_lists
+
+def print_result_info(result):
+    fields = ["pre", "mid", "post", "p_up", "p_down"]
+    est_fields = [f + "_est" for f in fields]
+
+    print("(truth,estimated)")
+    for field, est_field in zip(fields, est_fields):
+        print(f"{field}: {result[field], result[est_field]}")
+
+    print("val:" + str(result["val"]))
+    print("AIC:" + str(result["AIC"]))
+    print("ev_string:" + str(result["ev_str"]))
+
+
+sorted_filenames = get_filenames_sorted_by_time()
+list_of_lists = process_test_cases(sorted_filenames)
 
 def top_n_lists_by_best_aic(lists_of_dicts, n):
     sorted_lists = sorted(lists_of_dicts, key=lambda l: min(d['AIC'] for d in l))
@@ -207,6 +201,13 @@ def filter_lists_by_ev_str(lists_of_dicts, p):
 print("RAW")
 all_true_estimates = get_all_true_estimates(list_of_lists)
 all_best_estimates = get_all_best_estimates(list_of_lists)
+
+worst_are_first = sort_dicts_by_worst_aic(all_best_estimates)
+
+
+
+sys.exit()
+
 
 print("BEST ESTIMATED")
 print(create_3x3_grid(all_best_estimates))
