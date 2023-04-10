@@ -541,18 +541,6 @@ def remove_SNVs_from_tree(tree):
     return(tree)
 
 
-# code to remove all dead nodes in the tree while also updating the parent field of the removed node's children to the parent of the removed node:
-#n@profile
-def remove_dead_nodes_old(tree):
-    if tree is None:
-        return None
-
-    if tree['unique_identifier'] != -1:
-        # recursively continue to remove dead children from this current node until its children are all not dead:
-        while True:
-            if tree.get('child') is not None and tree['child'].get('dead'):
-                parent = tree["parent"]
-                tree = copy.deepcopy(tree['complement'])
                 tree["parent"] = parent
 
             elif tree.get('complement') is not None and tree['complement'].get('dead'):
@@ -602,7 +590,7 @@ def remove_dead_nodes_old2(tree):
 
     return tree
 
-def remove_dead_nodes(tree):
+def remove_dead_nodes3(tree):
     if tree is None:
         return None
 
@@ -636,6 +624,147 @@ def remove_dead_nodes(tree):
             return tree['complement']
 
     return tree
+
+def remove_dead_nodes4(tree):
+    def find_bottom_complement(node):
+        while node.get('complement') is not None:
+            node = node['complement']
+        return node
+
+    if tree is None:
+        return None
+
+    # Check and update the child and complement of the current node recursively
+    if tree.get('child') is not None:
+        tree['child'] = remove_dead_nodes(tree['child'])
+
+    if tree.get('complement') is not None:
+        tree['complement'] = remove_dead_nodes(tree['complement'])
+
+    both_children_dead = (
+        (tree.get('child') is not None and tree['child'].get('dead') is True) and
+        (tree.get('complement') is not None and tree['complement'].get('dead') is True)
+    )
+
+    if both_children_dead:
+        tree['dead'] = False
+
+    should_remove_dead_node = (
+        tree.get('dead') is True and
+        (tree.get('parent') != -1 or (tree.get('parent') == -1 and (tree.get('child') is not None or tree.get('complement') is not None))) and
+        not both_children_dead
+    )
+
+    if should_remove_dead_node:
+        parent = tree.get('parent')
+
+        if tree.get('child') is not None and tree.get('complement') is not None:
+            tree['child']['parent'] = parent
+
+            bottom_complement = find_bottom_complement(tree['child'])
+            bottom_complement['complement'] = tree['complement']
+            tree['complement']['parent'] = bottom_complement['unique_identifier']
+
+            return tree['child']
+
+        elif tree.get('child') is not None:
+            tree['child']['parent'] = parent
+            return tree['child']
+
+        elif tree.get('complement') is not None:
+            tree['complement']['parent'] = parent
+            return tree['complement']
+
+    return tree
+
+def remove_dead_nodes(tree):
+    if tree is None:
+        return None
+
+    if tree['child']:
+        tree['child'] = remove_dead_nodes(tree['child'])
+    if tree['complement']:
+        tree['complement'] = remove_dead_nodes(tree['complement'])
+
+    if tree['child'] is None and tree['complement'] is None and tree.get('dead', False):
+        return None
+
+    return tree
+
+def node_has_valid_children(node):
+    return node["child"] is not None and node["complement"] is not None and node["parent"] is not None
+
+def check_copy_number(child_node, root_node):
+    if child_node is None:
+        return
+
+    if child_node["copy_number"] != 0:
+        print(f"AssertionError: Invalid copy_number found in node: {child_node}")
+        print(f"Full tree: {root_node}")
+        raise AssertionError("Invalid copy_number found in descendants.")
+
+    check_copy_number(child_node["child"], root_node)
+    check_copy_number(child_node["complement"], root_node)
+
+
+def remove_redundant_parents1(node):
+    if node is None:
+        return None
+
+    # Recursive call for child and complement nodes
+    node["child"] = remove_redundant_parents(node["child"])
+    node["complement"] = remove_redundant_parents(node["complement"])
+
+    # Use a while loop to keep checking for redundant nodes after updating the current node
+    while node_has_valid_children(node):
+        updated = False
+
+        if node["copy_number"] == node["child"]["copy_number"]:
+            check_copy_number(node["complement"], node)
+            node = node["child"]
+            updated = True
+
+        if node["copy_number"] == node["complement"]["copy_number"]:
+            check_copy_number(node["child"], node)
+            node = node["complement"]
+            updated = True
+
+        if not updated:
+            break
+
+    return node
+
+def are_all_descendants_zero(node):
+    if node is None:
+        return True
+
+    if node["copy_number"] != 0:
+        return False
+
+    return are_all_descendants_zero(node["child"]) and are_all_descendants_zero(node["complement"])
+
+
+def remove_redundant_parents(node):
+    if node is None:
+        return None
+
+    # Recursively process child and complement nodes
+    node["child"] = remove_redundant_parents(node["child"])
+    node["complement"] = remove_redundant_parents(node["complement"])
+
+    # Check for the conditions to remove the node, only if the node has a parent
+    if node["parent"] is not None:
+        if node["child"] is not None and node["child"]["copy_number"] == node["copy_number"]:
+            if not are_all_descendants_zero(node["complement"]):
+                raise ValueError("Invalid tree: child and complement copy_number do not add up to parent's copy_number")
+            return node["complement"]
+        elif node["complement"] is not None and node["complement"]["copy_number"] == node["copy_number"]:
+            if not are_all_descendants_zero(node["child"]):
+                raise ValueError("Invalid tree: child and complement copy_number do not add up to parent's copy_number")
+            return node["child"]
+
+    return node
+
 
 
 # The function takes in the tree as an argument and checks if the current node is dead or not. 
@@ -687,6 +816,10 @@ def create_truth_trees(simulated_chromosomes):
         pretty_print("with dead nodes removed:")
         pretty_print(trees[chrom_type])
         pretty_print(CN_tree_from_truth_tree(trees[chrom_type]))
+        trees[chrom_type] = remove_redundant_parents(trees[chrom_type])
+        pretty_print("with redundant nodes removed:")
+        pretty_print(trees[chrom_type])
+        pretty_print(CN_tree_from_truth_tree(trees[chrom_type]))
         pretty_print(make_left_heavy(CN_tree_from_truth_tree(trees[chrom_type])))
         pretty_print("######\n"*5)
 
@@ -715,8 +848,7 @@ def CN_tree_from_truth_tree(truth_tree):
 
 
 
-#@profile
-def make_left_heavy(tree):
+def make_left_heavy_old(tree):
 
     if len(tree) == 1:
         return(tree)
@@ -725,6 +857,19 @@ def make_left_heavy(tree):
             return([tree[0],make_left_heavy(tree[2]),make_left_heavy(tree[1])])
         else:
             return([tree[0],make_left_heavy(tree[1]),make_left_heavy(tree[2])])
+
+def make_left_heavy(tree):
+    if len(tree) == 1:
+        return tree
+    else:
+        left_child = tree[1]
+        right_child = tree[2] if len(tree) == 3 else [0]
+
+        if left_child[0] < right_child[0]:
+            return [tree[0], make_left_heavy(right_child), make_left_heavy(left_child)]
+        else:
+            return [tree[0], make_left_heavy(left_child), make_left_heavy(right_child)]
+
 
 #@profile
 def CN_trees_from_truth_trees(truth_trees):
