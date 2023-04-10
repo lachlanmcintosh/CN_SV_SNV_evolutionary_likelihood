@@ -1,6 +1,6 @@
 #!/bin/bash
 
-atatime=20
+atatime=40
 reps=1
 total_jobs=$((atatime * reps))
 

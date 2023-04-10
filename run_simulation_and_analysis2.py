@@ -67,9 +67,6 @@ pretty_print("Unused functions:" +str(unused_functions))
 # Finally, it computes the set difference between the defined and called functions to find the functions that are defined but not used.
 
 
-# precomputed files
-precomputed_file_folder = "/vast/scratch/users/lmcintosh/GD2/GD/"
-
 
 ##### STEP 1; WRITE A FUNCTION THAT CAN SIMULATE A GENOME
 #####
@@ -77,6 +74,9 @@ precomputed_file_folder = "/vast/scratch/users/lmcintosh/GD2/GD/"
 #####
 #####
 #####
+
+# precomputed files
+precomputed_file_folder = "/vast/scratch/users/lmcintosh/GD2/GD/"
 
 # copied from http://www.insilicase.com/Web/Chromlen.aspx
 # Percent of total (Female) genome
@@ -550,7 +550,7 @@ def remove_dead_nodes(tree):
     if tree['complement']:
         tree['complement'] = remove_dead_nodes(tree['complement'])
 
-    if tree['child'] is None and tree['complement'] is None and tree.get('dead', False) and tree['parent'] is not -1:
+    if tree['child'] is None and tree['complement'] is None and tree.get('dead', False) and tree['parent'] != -1:
         return None
 
     return tree
@@ -1210,7 +1210,7 @@ def get_timings_per_tree(tree,epochs):
 
 
 #@profile
-def get_all_trees_and_timings(observed_SNV_multiplicities, observed_CNs):
+def get_all_trees_and_timings(observed_SNV_multiplicities, observed_CNs,pre,mid,post):
     trees_and_timings = {}
     for chrom in observed_SNV_multiplicities:
         pretty_print(chrom)
@@ -1611,13 +1611,6 @@ def find_BP_and_SNV_loglik(plambda_start, p_up_start, p_down_start, trees_and_ti
 
 
 #@profile
-def objective_function_SNV_loglik(plambda,timings,BP_likelihoods):
-    total,best = find_best_SNV_likelihood(plambda,timings,BP_likelihoods)
-    #pretty_print(best)
-    return(-total)
-
-
-#@profile
 def path_code_to_pre_mid_post(path):
     bits = [int(x) for x in path.split("G")] + [-1,-1]
     pre, mid, post = bits[0:3]
@@ -1655,24 +1648,6 @@ def is_the_same_CN_tree(tree1,tree2):
 
     return (is_the_same_CN_tree(tree1[1], tree2[1]) and 
             is_the_same_CN_tree(tree1[2], tree2[2]))
-
-
-# a function that counts the number of matching nodes in the tree:
-# The function now returns an integer instead of a Boolean, which represents the number of nodes in the two trees that are identical. 
-# If the two trees have different lengths, the function returns 0. 
-# If the length is equal to 1, the function returns 1 if the single node value is equal, or 0 otherwise. 
-# If the length is greater than 1, the function recursively compares the two children trees and adds 1 if the current node value is equal.
-#@profile
-def count_matching_CN_nodes(tree1,tree2):
-    if len(tree1) != len(tree2):
-        return 0
-
-    if len(tree1) == 1:
-        return 1 if tree1[0] == tree2[0] else 0
-
-    return (compare_trees(tree1[1], tree2[1]) + 
-            compare_trees(tree1[2], tree2[2]) +
-            (1 if tree1[0] == tree2[0] else 0))
 
 
 # a function to count the number of nodes in just one tree:
@@ -2208,7 +2183,10 @@ if do_search:
 
         trees_and_timings = get_all_trees_and_timings(
             observed_SNV_multiplicities = observed_SNV_multiplicities,
-            observed_CNs = observed_CNs
+            observed_CNs = observed_CNs,
+            pre=pre,
+            mid=mid,
+            post=post
             )
 
         pretty_print("investigate the problem")
@@ -2451,12 +2429,13 @@ for result_index,res in enumerate(sorted(results)):
             "BP_likelihoods":BP_likelihoods,
             "total_SNV_likelihood":total,
             "best_SNV_likelihood":best,
-            "pre":pre_real,
-            "mid":mid_real,
-            "post":post_real,
+            "pre":real_pre,
+            "mid":real_mid,
+            "post":real_post,
             "total_epochs":total_epochs,
-            "p_up":p_up_real,
-            "p_down":p_down_real
+            "p_up":real_p_up,
+            "p_down":real_p_down,
+            "plambda":real_rate
             }
     for key in new_result:
         pretty_print(key+": "+str(new_result[key]))
