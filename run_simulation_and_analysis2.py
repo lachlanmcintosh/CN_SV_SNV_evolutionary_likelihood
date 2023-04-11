@@ -566,27 +566,6 @@ def are_all_descendants_zero(node):
 
 
 def remove_redundant_parents(node):
-    if node is None:
-        return None
-
-    # Recursively process child and complement nodes
-    node["child"] = remove_redundant_parents(node["child"])
-    node["complement"] = remove_redundant_parents(node["complement"])
-
-    # Check for the conditions to remove the node, only if the node has a parent
-    if node["parent"] is not None:
-        if node["child"] is not None and node["child"]["copy_number"] == node["copy_number"]:
-            if not are_all_descendants_zero(node["complement"]):
-                raise ValueError("Invalid tree: child and complement copy_number do not add up to parent's copy_number")
-            return node["child"]
-        elif node["complement"] is not None and node["complement"]["copy_number"] == node["copy_number"]:
-            if not are_all_descendants_zero(node["child"]):
-                raise ValueError("Invalid tree: child and complement copy_number do not add up to parent's copy_number")
-            return node["complement"]
-
-    return node
-
-def remove_redundant_parents(node):
     def are_all_descendants_zero(node):
         if node is None:
             return True
@@ -622,6 +601,37 @@ def remove_redundant_parents(node):
     return node
 
 
+def with_epoch_killed(tree,max_epochs):
+    """
+    The function calculates the epoch_killed for each node in the given tree.
+
+    :param tree: A dictionary representing a tree node with keys:
+                 'child', 'complement', 'epoch_created', and 'epoch_killed'.
+    :return: The modified tree with 'epoch_killed' values added.
+    """
+
+    if tree is None:
+        return None
+
+    child = tree.get('child')
+    complement = tree.get('complement')
+
+    if child is not None and complement is not None:
+        child_epoch_created = child.get('epoch_created')
+        complement_epoch_created = complement.get('epoch_created')
+
+        if child_epoch_created != complement_epoch_created:
+            raise ValueError("Epoch created values of child and complement do not match.")
+
+        tree['child'] = with_epoch_killed(child,max_epochs)
+        tree['complement'] = with_epoch_killed(complement,max_epochs)
+
+        tree['epoch_killed'] = child['epoch_created']
+    else:
+        tree['epoch_killed'] = max_epochs 
+
+    return tree
+
 
 # The function takes in the tree as an argument and checks if the current node is dead or not. 
 # If it is dead, the function moves the children of that node up to the parent of the dead node, by updating their parent field to be the same as the parent field of the dead node. 
@@ -631,7 +641,7 @@ def remove_redundant_parents(node):
 # The code checks if the parent of a dead node is equal to "-1" before removing it. If the parent is "-1", then the node is not removed and the function moves on to its children.
 
 #@profile
-def create_truth_trees(simulated_chromosomes):
+def create_truth_trees(simulated_chromosomes,max_epochs):
     #there is a tree fro every chromosome
     trees = {}
     for chrom_type in simulated_chromosomes:
@@ -674,6 +684,10 @@ def create_truth_trees(simulated_chromosomes):
         pretty_print(CN_tree_from_truth_tree(trees[chrom_type]))
         trees[chrom_type] = remove_redundant_parents(trees[chrom_type])
         pretty_print("with redundant nodes removed:")
+        pretty_print(trees[chrom_type])
+        pretty_print(CN_tree_from_truth_tree(trees[chrom_type]))
+        trees[chrom_type] = with_epoch_killed(trees[chrom_type],max_epochs)
+        pretty_print("with epoch killed:")
         pretty_print(trees[chrom_type])
         pretty_print(CN_tree_from_truth_tree(trees[chrom_type]))
         pretty_print(make_left_heavy(CN_tree_from_truth_tree(trees[chrom_type])))
@@ -1994,7 +2008,7 @@ if do_simulation:
         pretty_print(simulated_chromosomes[chrom])
 
     pretty_print("the truth trees are:")
-    truth_trees =  create_truth_trees(simulated_chromosomes)
+    truth_trees =  create_truth_trees(simulated_chromosomes=simulated_chromosomes,max_epochs=pre+mid+post+2)
     for chrom_type in truth_trees:
         pretty_print(truth_trees[chrom_type])
 
@@ -2295,7 +2309,7 @@ for result_index,res in enumerate(sorted(results)):
 
     total, best = find_best_SNV_likelihood(plambda_est,trees_and_timings,BP_likelihoods)
 
-    simulated_trees = create_truth_trees(simulated_chromosomes)
+    simulated_trees = create_truth_trees(simulated_chromosomes=simulated_chromosomes,max_epochs=pre_est+mid_est+post_est+2)
     simplified_simulated_trees = {}
     estimated_trees = {}
     for chrom in best:
@@ -2346,7 +2360,7 @@ for result_index,res in enumerate(sorted(results)):
         pretty_print(estimated_trees[chrom])
 
         pretty_print("simulated tree")
-        simplified_simulated_trees[chrom] = order_tree_keys_alphabetically(filter_tree(simulated_trees[chrom],keys_to_keep = ["copy_number","epoch_created"]))
+        simplified_simulated_trees[chrom] = order_tree_keys_alphabetically(filter_tree(simulated_trees[chrom],keys_to_keep = ["copy_number","epoch_killed"]))
         pretty_print(simplified_simulated_trees[chrom])
         
     # now compare the results to the truth!
