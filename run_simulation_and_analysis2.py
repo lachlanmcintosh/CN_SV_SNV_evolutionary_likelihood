@@ -1896,10 +1896,10 @@ pretty_print("START")
 test_case = sys.argv[1]
 #test_case = 10000 #sys.argv[1]
 do_simulation = False 
-#do_simulation = True 
+do_simulation = True 
 
 cache_results = False
-#cache_results = True
+cache_results = True
 
 do_search = False
 do_search = True
