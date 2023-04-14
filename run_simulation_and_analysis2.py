@@ -1685,7 +1685,7 @@ def sort_tree_by_copy_number(tree):
         if tree['complement'].get('copy_number') > tree['child'].get('copy_number'):
             tree['child'], tree['complement'] = tree['complement'], tree['child']
         elif tree['complement'].get('copy_number') == tree['child'].get('copy_number') and \
-            tree['child'].get('epoch_created') > tree['complement'].get('epoch_created'):
+            tree['child'].get('epoch_index') > tree['complement'].get('epoch_index'):
             tree['child'], tree['complement'] = tree['complement'], tree['child']
         sort_tree_by_copy_number(tree['child'])
         sort_tree_by_copy_number(tree['complement'])
@@ -1707,10 +1707,7 @@ def sort_tree_by_copy_number(tree):
 # If all checks return True, the function returns True, indicating that the two trees are topologically identical and have the same epoch_created value and copy_number value at each node.
 #@profile
 def is_the_same_dict_tree_by_epoch_and_time_created(tree1,tree2):
-    #if tree1['unique_identifier'] != tree2['unique_identifier']:
-    #    return False
-
-    if tree1['epoch_created'] != tree2['epoch_created']:
+    if tree1['epoch_index'] != tree2['epoch_index']:
         return False
 
     if tree1['copy_number'] != tree2['copy_number']:
@@ -1748,9 +1745,9 @@ def sum_tree_distance(tree1, tree2,diff_struct_is_inf=False):
 
     if (tree1 is not None and tree2 is not None and
             tree1['copy_number'] == tree2['copy_number'] and 
-            tree1["epoch_created"] is not None and 
-            tree2["epoch_created"] is not None):
-        sum += abs(tree1['epoch_created'] - tree2['epoch_created'])
+            tree1["epoch_index"] is not None and 
+            tree2["epoch_index"] is not None):
+        sum += abs(tree1['epoch_index'] - tree2['epoch_index'])
 
     if tree1.get('child') is not None and tree2.get('child') is not None:
         sum += sum_tree_distance(tree1['child'], tree2['child'])
@@ -1779,7 +1776,7 @@ def count_nodes_with_same_copy_number(tree1, tree2):
 def count_nodes_with_same_properties(tree1, tree2):
     count = 0
     if 'copy_number' in tree1 and 'copy_number' in tree2 and tree1['copy_number'] == tree2['copy_number'] and \
-    'epoch_created' in tree1 and 'epoch_created' in tree2 and tree1['epoch_created'] == tree2['epoch_created']:
+    'epoch_index' in tree1 and 'epoch_index' in tree2 and tree1['epoch_index'] == tree2['epoch_index']:
         count += 1
     for child_key in ['child', 'complement']:
         if child_key in tree1 and child_key in tree2 and tree1[child_key] is not None and tree2[child_key] is not None:
@@ -1811,21 +1808,19 @@ def convert_dict_tree_to_list(tree,total_epochs=None,is_truth=False):
         return None
 
     copy_number = tree.get('copy_number')
-    epoch_created = tree.get('epoch_created')
+    epoch_index = tree.get('epoch_index')
 
     if is_truth:
         if 'child' in tree and tree["child"] is not None:
-            epoch_created = tree["child"]["epoch_created"]
+            epoch_index = tree["child"]["epoch_index"]
         else:
-            epoch_created = total_epochs #max_epochs
+            epoch_index = total_epochs 
 
     child_tree = convert_dict_tree_to_list(tree.get('child'),total_epochs,is_truth)
     complement_tree = convert_dict_tree_to_list(tree.get('complement'),total_epochs,is_truth)
     if child_tree is None:
-        return [(copy_number, epoch_created)]
-    return [(copy_number, epoch_created), child_tree, complement_tree]
-    #return [(copy_number, epoch_killed), child_tree, complement_tree]
-
+        return [(copy_number, epoch_index)]
+    return [(copy_number, epoch_index), child_tree, complement_tree]
 
 # This function uses recursion to traverse the dictionary tree and convert each node into a tuple containing the 'copy_number' and 'epoch_created' fields, and two lists representing the 'child' and 'complement' subtrees, respectively. If a node does not have a 'child' or 'complement' subtree, the corresponding list will be None.
 
@@ -1901,10 +1896,10 @@ pretty_print("START")
 test_case = sys.argv[1]
 #test_case = 10000 #sys.argv[1]
 do_simulation = False 
-do_simulation = True 
+#do_simulation = True 
 
 cache_results = False
-cache_results = True
+#cache_results = True
 
 do_search = False
 do_search = True
@@ -2290,6 +2285,29 @@ def order_tree_keys_alphabetically(tree):
             ordered_tree[key] = tree[key]
     return ordered_tree
 
+def create_epoch_index(tree, key_from, key_to):
+    """
+    The function replaces the key called 'key_from' in the dictionary 'tree' with a new key called 'key_to',
+    keeping the original value.
+
+    :param tree: A dictionary representing a tree node.
+    :param key_from: The original key to be replaced.
+    :param key_to: The new key that will replace the original key.
+    :return: The modified tree with the key replaced.
+    """
+
+    if key_from in tree:
+        tree[key_to] = tree[key_from]
+        del tree[key_from]
+
+    if 'child' in tree and tree['child'] is not None:
+        tree['child'] = create_epoch_index(tree['child'], key_from, key_to)
+
+    if 'complement' in tree and tree['complement'] is not None:
+        tree['complement'] = create_epoch_index(tree['complement'], key_from, key_to)
+
+    return tree
+
 
 all_results = {}
 for result_index,res in enumerate(sorted(results)):
@@ -2378,6 +2396,8 @@ for result_index,res in enumerate(sorted(results)):
     num_chrom_with_correct_CN_and_epoch_created = 0
     average_distance_from_truth_of_epoch_created = 0
     for chrom in estimated_trees:
+        simulated_trees[chrom] = create_epoch_index(tree=simulated_trees[chrom],key_from="epoch_killed",key_to="epoch_index")
+        estimated_trees[chrom] = create_epoch_index(tree=estimated_trees[chrom],key_from="epoch_created",key_to="epoch_index")
         simulated_trees[chrom] = sort_tree_by_copy_number(simulated_trees[chrom])
         estimated_trees[chrom] = sort_tree_by_copy_number(estimated_trees[chrom])
         for i in range(5):
@@ -2446,7 +2466,6 @@ for result_index,res in enumerate(sorted(results)):
             "pre":real_pre,
             "mid":real_mid,
             "post":real_post,
-            "total_epochs":total_epochs,
             "p_up":real_p_up,
             "p_down":real_p_down,
             "plambda":real_rate

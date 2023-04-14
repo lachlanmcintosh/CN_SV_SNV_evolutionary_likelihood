@@ -179,6 +179,8 @@ def print_result_info(result):
 
 sorted_filenames = get_filenames_sorted_by_time()
 list_of_lists = process_test_cases(sorted_filenames)
+print(sorted_filenames)
+print(list_of_lists)
 
 def top_n_lists_by_best_aic(lists_of_dicts, n):
     sorted_lists = sorted(lists_of_dicts, key=lambda l: min(d['AIC'] for d in l))
