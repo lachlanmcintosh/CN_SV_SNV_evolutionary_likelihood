@@ -1,5 +1,7 @@
 #!/bin/bash
 
+sbatch touch_all.sh
+
 atatime=40
 reps=1
 total_jobs=$((atatime * reps))

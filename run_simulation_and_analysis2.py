@@ -76,7 +76,7 @@ pretty_print("Unused functions:" +str(unused_functions))
 #####
 
 # precomputed files
-precomputed_file_folder = "/vast/scratch/users/lmcintosh/GD2/GD/"
+precomputed_file_folder = "PRECOMPUTED/MATRICES/" #"/vast/scratch/users/lmcintosh/GD2/GD/"
 
 # copied from http://www.insilicase.com/Web/Chromlen.aspx
 # Percent of total (Female) genome
@@ -773,7 +773,7 @@ def count_CN_multiplicities(observed_CNs):
 # for every copy number sum the precomputed values weighted against their multiplicity
 # then adjust for CN’s not being able to go to zero
 #@profile
-def CN_multiplicities_to_likelihoods(observed_CN_multiplicities):
+def CN_multiplicities_to_likelihoods_old(observed_CN_multiplicities):
     # these relative references will need to be modified before publishing 
     def CN_filename(CN):
         return precomputed_file_folder + "/collated_128_p128_v3_"+str(CN)+".npy"
@@ -814,9 +814,36 @@ def CN_multiplicities_to_likelihoods(observed_CN_multiplicities):
 
     return(named_likelihoods)
 
+def calculate_likelihoods(all_data, observed_CN_multiplicities):
+    observed_CN_multiplicities_str = {str(key): value for key, value in observed_CN_multiplicities.items()}
+    lls = np.sum([all_data[copy] * multiplicity for copy, multiplicity in observed_CN_multiplicities_str.items()], axis=0)
 
+    assert np.shape(lls) == np.shape(all_data["0"])
+    print("the shape of the log likelihoods are")
+    print(np.shape(lls))
+    likelihoods = np.exp(lls)
+    if "0" in observed_CN_multiplicities:
+        likelihoods = likelihoods / (1-exp(all_data["0"]))**observed_CN_multiplicities["0"]
+    return likelihoods 
 
-#@profile
+def read_pickle_with_custom_columns(file_name):
+    all_data = pd.read_pickle(file_name)
+    return all_data
+
+def CN_multiplicities_to_likelihoods(observed_CN_multiplicities):
+    file_name = "PRECOMPUTED/MATRICES/collated_p8_v4_logged.pickle"
+    p_value = int(re.findall(r"_p(\d+)_", file_name)[0])
+    all_data = read_pickle_with_custom_columns(file_name)
+    likelihoods = calculate_likelihoods(all_data, observed_CN_multiplicities)
+    named_likelihoods = all_data[["p_up", "p_down", "path"]].copy()
+    named_likelihoods.insert(3, "likelihood", likelihoods, True)
+    named_likelihoods.replace([np.inf, -np.inf], np.nan, inplace=True)
+    named_likelihoods.dropna(axis=0, inplace=True)
+    named_likelihoods.sort_values(by=['likelihood'], inplace=True, ascending=False)
+    total = np.nansum(named_likelihoods["likelihood"])
+    named_likelihoods["likelihood"] /= total
+    return named_likelihoods
+
 def likelihoods_to_marginal_likelihoods(likelihoods, top, default_paths):
     # Create a copy of the likelihoods DataFrame
     marginal_likelihoods = likelihoods.copy()
@@ -1218,7 +1245,10 @@ def get_timings_per_tree(tree,epochs):
             
             # this column in the timings array has been filled with times that satisfy the constraint for its respective node 
             # so now we can update the timings array and move onto the next node/column
-            timings = new_timings
+            try:
+                timings = new_timings
+            except:
+                continue
 
     return((tree, labelled_tree, count, timings, parents))
 
@@ -1429,9 +1459,11 @@ def timing_struct_to_BP_likelihood_per_chrom(data, trees_and_timings, pre, mid, 
 
 #@profile
 def get_BP_likelihoods(trees_and_timings,pre,mid,post,p_up,p_down):
-    file = precomputed_file_folder + \
-        "/precomputed/store_pre_pickle/pre_mat129_u"+str(int(p_up))+ \
-        "_d"+str(int(p_down))+".precomputed.pickle"
+    #file = precomputed_file_folder + \
+    #    "/precomputed/store_pre_pickle/pre_mat129_u"+str(int(p_up))+ \
+    #    "_d"+str(int(p_down))+".precomputed.pickle"
+
+    file = "PRECOMPUTED/MATRICES/subbed_mat_u"+str(int(p_up))+"_d"+str(int(p_down))+"_p8_v4.precomputed_paths.pickle"
     data = pkl.load(open(file,'rb'))
     BP_likelihoods = {}
     for chrom in trees_and_timings.keys():
